@@ -1,45 +1,86 @@
 import winston from 'winston';
+import path from 'path';
 
-// Define the custom settings for each transport (file, console)
-const options = {
-  file: {
-    level: process.env.LOG_LEVEL || 'info',
-    filename: 'logs/app.log',
-    handleExceptions: true,
-    maxSize: 5242880, // 5MB
-    maxFiles: 5,
-    format: winston.format.combine(
-      winston.format.timestamp(),
-      winston.format.json()
-    ),
-  },
-  console: {
-    level: 'debug',
-    handleExceptions: true,
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.timestamp(),
-      winston.format.printf(
-        (info) => `${info.timestamp} ${info.level}: ${info.message}`
-      )
-    ),
-  },
+// Define log levels
+const levels = {
+  error: 0,
+  warn: 1,
+  info: 2,
+  http: 3,
+  debug: 4,
 };
 
-// Instantiate a new Winston logger with the settings defined above
-const logger = winston.createLogger({
-  transports: [
-    new winston.transports.File(options.file),
-    new winston.transports.Console(options.console),
-  ],
-  exitOnError: false, // do not exit on handled exceptions
+// Define level based on the environment
+const level = () => {
+  const env = process.env.NODE_ENV || 'development';
+  const isDevelopment = env === 'development';
+  return isDevelopment ? 'debug' : 'warn';
+};
+
+// Define custom colors
+const colors = {
+  error: 'red',
+  warn: 'yellow',
+  info: 'green',
+  http: 'magenta',
+  debug: 'white',
+};
+
+// Add colors to Winston
+winston.addColors(colors);
+
+// Define the format for the timestamp
+const timestampFormat = winston.format.timestamp({
+  format: 'YYYY-MM-DD HH:mm:ss',
 });
 
-// Create a stream object with a 'write' function that will be used by morgan
-export const stream = {
-  write: (message: string) => {
-    logger.info(message.trim());
-  },
-};
+// Custom format for console output
+const consoleFormat = winston.format.combine(
+  timestampFormat,
+  winston.format.colorize({ all: true }),
+  winston.format.printf(
+    (info) => `${info.timestamp} ${info.level}: ${info.message}`,
+  ),
+);
 
+// Custom format for file output (JSON)
+const fileFormat = winston.format.combine(
+  timestampFormat,
+  winston.format.json(),
+);
+
+// Define the transports
+const transports = [
+  // Console transport for all logs
+  new winston.transports.Console({
+    format: consoleFormat,
+  }),
+  
+  // File transport for error logs
+  new winston.transports.File({
+    filename: path.join('logs', 'error.log'),
+    level: 'error',
+    format: fileFormat,
+    maxsize: 5242880, // 5MB
+    maxFiles: 5,
+  }),
+  
+  // File transport for all logs
+  new winston.transports.File({
+    filename: path.join('logs', 'combined.log'),
+    format: fileFormat,
+    maxsize: 5242880, // 5MB
+    maxFiles: 5,
+  }),
+];
+
+// Create the logger
+export const logger = winston.createLogger({
+  level: level(),
+  levels,
+  transports,
+  exitOnError: false, // Don't exit on unhandled exceptions
+});
+
+// Export logger as default
 export default logger; 

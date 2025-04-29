@@ -1,16 +1,46 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, RoomStatus, FeeType, User, Property, Room, Renter, Service, DocumentType, ContractType, BillingCycle } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
+import { faker } from '@faker-js/faker';
 
 // Load environment variables
 dotenv.config();
 
 const prisma = new PrismaClient();
 
+// Configuration for how many records to create
+const NUM_PROPERTIES_PER_USER = 3; // Each property manager will have 1-3 properties
+const NUM_ROOMS_PER_PROPERTY = 15; // Each property will have 5-15 rooms
+const NUM_RENTERS = 50;
+const NUM_SERVICES = 14;
+const NUM_EXPENSES = 50;
+const NUM_MAINTENANCE_EVENTS = 25;
+
 async function main() {
-  console.log('Starting seeding...');
+  console.log('Starting enhanced seeding...');
 
   try {
+    // Get or create roles first
+    const adminRole = await prisma.role.findFirst({
+      where: { name: 'ADMIN' }
+    });
+
+    const userRole = await prisma.role.findFirst({
+      where: { name: 'USER' }
+    });
+
+    const managerRole = await prisma.role.findFirst({
+      where: { name: 'PROPERTY_MANAGER' }
+    });
+
+    const renterRole = await prisma.role.findFirst({
+      where: { name: 'RENTER' }
+    });
+
+    if (!adminRole || !userRole || !managerRole || !renterRole) {
+      throw new Error('Roles not found. Please run model-migration.js first.');
+    }
+
     // Create an admin user
     const hashedPassword = await bcrypt.hash('Admin@123', 12);
     const admin = await prisma.user.upsert({
@@ -20,50 +50,33 @@ async function main() {
         email: 'admin@example.com',
         name: 'Admin User',
         password: hashedPassword,
-        role: 'ADMIN',
+        userRoles: {
+          create: {
+            roleId: adminRole.id
+          }
+        }
       },
     });
     console.log(`Created admin user with ID: ${admin.id}`);
 
-    // Create a regular user
-    const userPassword = await bcrypt.hash('User@123', 12);
-    const user = await prisma.user.upsert({
-      where: { email: 'user@example.com' },
-      update: {},
-      create: {
-        email: 'user@example.com',
-        name: 'Regular User',
-        password: userPassword,
-        role: 'USER',
-      },
-    });
-    console.log(`Created regular user with ID: ${user.id}`);
-
     // Create subscription plans
-    const basicPlan = await prisma.subscriptionPlan.upsert({
-      where: { id: 'plan-basic' },
-      update: {},
-      create: {
+    const plans = [
+      {
         id: 'plan-basic',
         name: 'Basic',
         description: 'For property owners with up to 10 rooms',
         price: 10,
         roomLimit: 10,
-        billingCycle: 'MONTHLY',
+        billingCycle: 'MONTHLY' as BillingCycle,
         features: ['Room Management', 'Renter Management', 'Basic Reporting'],
       },
-    });
-
-    const standardPlan = await prisma.subscriptionPlan.upsert({
-      where: { id: 'plan-standard' },
-      update: {},
-      create: {
+      {
         id: 'plan-standard',
         name: 'Standard',
         description: 'For property owners with 11-50 rooms',
         price: 20,
         roomLimit: 50,
-        billingCycle: 'MONTHLY',
+        billingCycle: 'MONTHLY' as BillingCycle,
         features: [
           'Room Management',
           'Renter Management',
@@ -72,18 +85,13 @@ async function main() {
           'Payment Tracking',
         ],
       },
-    });
-
-    const premiumPlan = await prisma.subscriptionPlan.upsert({
-      where: { id: 'plan-premium' },
-      update: {},
-      create: {
+      {
         id: 'plan-premium',
         name: 'Premium',
         description: 'For property owners with 51-100 rooms',
         price: 40,
         roomLimit: 100,
-        billingCycle: 'MONTHLY',
+        billingCycle: 'MONTHLY' as BillingCycle,
         features: [
           'Room Management',
           'Renter Management',
@@ -95,18 +103,13 @@ async function main() {
           'Email Notifications',
         ],
       },
-    });
-
-    const enterprisePlan = await prisma.subscriptionPlan.upsert({
-      where: { id: 'plan-enterprise' },
-      update: {},
-      create: {
+      {
         id: 'plan-enterprise',
         name: 'Enterprise',
         description: 'For property owners with over 100 rooms',
         price: 80,
         roomLimit: 999999, // Effectively unlimited
-        billingCycle: 'MONTHLY',
+        billingCycle: 'MONTHLY' as BillingCycle,
         features: [
           'Room Management',
           'Renter Management',
@@ -122,454 +125,550 @@ async function main() {
           'Multiple Property Management',
         ],
       },
-    });
+    ];
 
+    // Create subscription plans
+    for (const planData of plans) {
+      await prisma.subscriptionPlan.upsert({
+        where: { id: planData.id },
+        update: {},
+        create: planData,
+      });
+    }
     console.log('Created subscription plans');
 
-    // Create user subscription
-    const subscription = await prisma.subscription.upsert({
-      where: { userId: user.id },
-      update: {},
-      create: {
-        userId: user.id,
-        planId: standardPlan.id,
-        status: 'ACTIVE',
-        autoRenew: true,
-        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      },
-    });
-    console.log(`Created subscription for user with ID: ${user.id}`);
+    // Create property managers (5-10)
+    const propertyManagers: User[] = [];
+    const numManagers = faker.number.int({ min: 5, max: 10 });
+    
+    for (let i = 0; i < numManagers; i++) {
+      const managerPassword = await bcrypt.hash('Manager@123', 12);
+      const firstName = faker.person.firstName();
+      const lastName = faker.person.lastName();
+      
+      const manager = await prisma.user.create({
+        data: {
+          email: faker.internet.email({ firstName, lastName }),
+          name: `${firstName} ${lastName}`,
+          password: managerPassword,
+          userRoles: {
+            create: {
+              roleId: managerRole.id
+            }
+          }
+        },
+      });
+      
+      propertyManagers.push(manager);
+      
+      // Create user preferences
+      await prisma.userPreference.create({
+        data: {
+          userId: manager.id,
+          darkMode: faker.datatype.boolean(),
+          fontSize: faker.helpers.arrayElement(['small', 'medium', 'large']),
+          colorTheme: faker.helpers.arrayElement(['default', 'dark', 'light', 'blue', 'green']),
+        },
+      });
+      
+      // Create subscription for manager
+      const randomPlan = faker.helpers.arrayElement(plans);
+      await prisma.subscription.create({
+        data: {
+          userId: manager.id,
+          planId: randomPlan.id,
+          status: faker.helpers.arrayElement(['ACTIVE', 'ACTIVE', 'ACTIVE', 'INACTIVE']),
+          autoRenew: faker.datatype.boolean(),
+          endDate: faker.date.future(),
+        },
+      });
+    }
+    console.log(`Created ${propertyManagers.length} property managers with preferences and subscriptions`);
 
-    // Create user preferences
-    const userPrefs = await prisma.userPreference.upsert({
-      where: { userId: user.id },
-      update: {},
-      create: {
-        userId: user.id,
-        darkMode: false,
-        fontSize: 'medium',
-        colorTheme: 'default',
-      },
-    });
-    console.log(`Created user preferences for user with ID: ${user.id}`);
-
-    // Create a property
-    const property = await prisma.property.create({
-      data: {
-        name: 'Sunset Apartments',
-        address: '123 Sunset Blvd, Los Angeles, CA 90001',
-        userId: user.id,
-      },
-    });
-    console.log(`Created property with ID: ${property.id}`);
+    // Create properties
+    const properties: Property[] = [];
+    for (const manager of propertyManagers) {
+      const numProperties = faker.number.int({ min: 1, max: NUM_PROPERTIES_PER_USER });
+      
+      for (let i = 0; i < numProperties; i++) {
+        const property = await prisma.property.create({
+          data: {
+            name: `${faker.company.name()} ${faker.helpers.arrayElement(['Apartments', 'Residences', 'Villas', 'Towers', 'Suites'])}`,
+            address: `${faker.location.streetAddress()}, ${faker.location.city()}, ${faker.location.state()} ${faker.location.zipCode()}`,
+            userId: manager.id,
+          },
+        });
+        
+        properties.push(property);
+      }
+    }
+    console.log(`Created ${properties.length} properties`);
 
     // Create rooms
-    const roomStatuses = ['AVAILABLE', 'OCCUPIED', 'RESERVED', 'MAINTENANCE'];
+    const roomStatuses: RoomStatus[] = ['AVAILABLE', 'OCCUPIED', 'RESERVED', 'MAINTENANCE'];
+    const rooms: Room[] = [];
     
-    for (let i = 1; i <= 10; i++) {
-      const floor = Math.ceil(i / 4);
-      const status = roomStatuses[Math.floor(Math.random() * roomStatuses.length)];
+    for (const property of properties) {
+      const numRooms = faker.number.int({ min: 5, max: NUM_ROOMS_PER_PROPERTY });
       
-      const room = await prisma.room.create({
-        data: {
-          name: `Room ${100 + i}`,
-          number: `${floor}${i % 4 === 0 ? 4 : i % 4}`,
-          floor,
-          size: 20 + Math.floor(Math.random() * 15),
-          description: `Standard ${i % 2 === 0 ? 'single' : 'double'} room with ${i % 3 === 0 ? 'city' : 'garden'} view.`,
-          status: status as any,
-          price: 500 + (i * 50),
-          images: [
-            `https://example.com/rooms/room${i}_1.jpg`,
-            `https://example.com/rooms/room${i}_2.jpg`,
-          ],
-          propertyId: property.id,
-        },
-      });
-      console.log(`Created room with ID: ${room.id}`);
+      for (let i = 1; i <= numRooms; i++) {
+        const floor = Math.ceil(i / 5);
+        const status = faker.helpers.arrayElement(roomStatuses);
+        
+        const room = await prisma.room.create({
+          data: {
+            name: `Room ${floor}${i % 5 === 0 ? 5 : i % 5}`,
+            number: `${floor}${i % 5 === 0 ? 5 : i % 5}`,
+            floor,
+            size: 20 + Math.floor(Math.random() * 30),
+            description: faker.helpers.arrayElement([
+              `Standard room with ${faker.helpers.arrayElement(['garden', 'city', 'pool', 'mountain'])} view.`,
+              `Spacious ${faker.helpers.arrayElement(['single', 'double', 'studio'])} room with modern amenities.`,
+              `Cozy ${faker.helpers.arrayElement(['single', 'double', 'studio'])} room with private bathroom.`,
+              `${faker.helpers.arrayElement(['Deluxe', 'Premium', 'Standard', 'Economy'])} room with ${faker.helpers.arrayElement(['balcony', 'large windows', 'air conditioning', 'heating system'])}.`
+            ]),
+            status,
+            price: 400 + Math.floor(Math.random() * 1000),
+            images: [
+              `https://example.com/rooms/room${i}_1.jpg`,
+              `https://example.com/rooms/room${i}_2.jpg`,
+            ],
+            propertyId: property.id,
+          },
+        });
+        
+        rooms.push(room);
+      }
     }
+    console.log(`Created ${rooms.length} rooms`);
 
     // Create renters
-    const renter1 = await prisma.renter.create({
-      data: {
-        name: 'John Doe',
-        email: 'john.doe@example.com',
-        phone: '555-123-4567',
-        emergencyContact: '555-987-6543',
-        identityNumber: 'ID12345678',
-        roomId: null, // Will assign later
-      },
-    });
-
-    const renter2 = await prisma.renter.create({
-      data: {
-        name: 'Jane Smith',
-        email: 'jane.smith@example.com',
-        phone: '555-234-5678',
-        emergencyContact: '555-876-5432',
-        identityNumber: 'ID87654321',
-        roomId: null, // Will assign later
-      },
-    });
-
-    console.log(`Created renters`);
-
-    // Get occupied rooms
-    const occupiedRooms = await prisma.room.findMany({
-      where: {
-        status: 'OCCUPIED',
-      },
-      take: 2,
-    });
-
-    if (occupiedRooms.length > 0) {
-      // Assign renter1 to first occupied room
-      await prisma.renter.update({
-        where: { id: renter1.id },
+    const renters: Renter[] = [];
+    for (let i = 0; i < NUM_RENTERS; i++) {
+      const firstName = faker.person.firstName();
+      const lastName = faker.person.lastName();
+      
+      const renter = await prisma.renter.create({
         data: {
-          roomId: occupiedRooms[0].id,
+          name: `${firstName} ${lastName}`,
+          email: faker.internet.email({ firstName, lastName }),
+          phone: faker.phone.number(),
+          emergencyContact: faker.phone.number(),
+          identityNumber: faker.string.alphanumeric(8).toUpperCase(),
+          roomId: null, // Will assign some later
         },
       });
-
-      // Create contract for renter1
-      const startDate = new Date();
-      const endDate = new Date();
-      endDate.setFullYear(endDate.getFullYear() + 1);
-
-      const contract1 = await prisma.contract.create({
-        data: {
-          name: 'One Year Lease',
-          renterId: renter1.id,
-          roomId: occupiedRooms[0].id,
-          startDate,
-          endDate,
-          amount: occupiedRooms[0].price,
-          securityDeposit: occupiedRooms[0].price * 2,
-          isLongTerm: true,
-          status: 'ACTIVE',
-          document: 'https://example.com/contracts/contract1.pdf',
-        },
-      });
-
-      console.log(`Created contract for renter1`);
-
-      // Create payments for renter1
-      const currentDate = new Date();
       
-      for (let i = 0; i < 6; i++) {
-        const dueDate = new Date(currentDate);
-        dueDate.setMonth(currentDate.getMonth() + i);
-        
-        const paidDate = i < 2 ? new Date(dueDate) : null; // First 2 months paid
-        paidDate?.setDate(dueDate.getDate() - 2); // Paid 2 days before due date
-        
-        await prisma.payment.create({
-          data: {
-            amount: occupiedRooms[0].price,
-            status: i < 2 ? 'PAID' : 'PENDING',
-            type: 'RENT',
-            dueDate,
-            paidDate,
-            description: `Monthly rent for ${dueDate.toLocaleString('default', { month: 'long' })} ${dueDate.getFullYear()}`,
-            renterId: renter1.id,
-            contractId: contract1.id,
-          },
-        });
-      }
+      renters.push(renter);
       
-      console.log(`Created payments for renter1`);
-
-      if (occupiedRooms.length > 1) {
-        // Assign renter2 to second occupied room
-        await prisma.renter.update({
-          where: { id: renter2.id },
+      // Create renter user accounts for some renters
+      if (faker.datatype.boolean() && i < NUM_RENTERS / 2) {
+        const renterPassword = await bcrypt.hash('Renter@123', 12);
+        const renterUser = await prisma.user.create({
           data: {
-            roomId: occupiedRooms[1].id,
-          },
-        });
-
-        // Create contract for renter2
-        const startDate2 = new Date();
-        startDate2.setMonth(startDate2.getMonth() - 2); // Started 2 months ago
-        const endDate2 = new Date(startDate2);
-        endDate2.setMonth(endDate2.getMonth() + 6); // 6 month lease
-
-        const contract2 = await prisma.contract.create({
-          data: {
-            name: 'Six Month Lease',
-            renterId: renter2.id,
-            roomId: occupiedRooms[1].id,
-            startDate: startDate2,
-            endDate: endDate2,
-            amount: occupiedRooms[1].price,
-            securityDeposit: occupiedRooms[1].price * 1.5,
-            isLongTerm: true,
-            status: 'ACTIVE',
-            document: 'https://example.com/contracts/contract2.pdf',
-          },
-        });
-
-        console.log(`Created contract for renter2`);
-
-        // Create payments for renter2
-        for (let i = 0; i < 6; i++) {
-          const dueDate = new Date(startDate2);
-          dueDate.setMonth(startDate2.getMonth() + i);
-          
-          const paidDate = i < 3 ? new Date(dueDate) : null; // First 3 months paid
-          if (paidDate) {
-            if (i === 2) {
-              // Late payment for 3rd month
-              paidDate.setDate(dueDate.getDate() + 3);
-            } else {
-              // On-time payments for 1st and 2nd month
-              paidDate.setDate(dueDate.getDate() - 1);
+            email: renter.email!,
+            name: renter.name,
+            password: renterPassword,
+            isRenter: true,
+            renterId: renter.id,
+            userRoles: {
+              create: {
+                roleId: renterRole.id
+              }
             }
+          }
+        });
+        
+        console.log(`Created user account for renter ${renter.name} with ID: ${renterUser.id}`);
+      }
+    }
+    console.log(`Created ${renters.length} renters`);
+
+    // Assign renters to occupied/reserved rooms
+    const occupiedRooms = rooms.filter(room => room.status === 'OCCUPIED' || room.status === 'RESERVED');
+    const renterToAssign = [...renters];
+    
+    for (let i = 0; i < Math.min(occupiedRooms.length, renterToAssign.length); i++) {
+      await prisma.renter.update({
+        where: { id: renterToAssign[i].id },
+        data: {
+          roomId: occupiedRooms[i].id,
+        },
+      });
+      
+      // Create contracts for occupied rooms
+      if (occupiedRooms[i].status === 'OCCUPIED') {
+        const contractTypes: ContractType[] = ['LONG_TERM', 'SHORT_TERM'];
+        const contractType = faker.helpers.arrayElement(contractTypes);
+        
+        const startDate = faker.date.past({ years: 1 });
+        const endDate = new Date(startDate);
+        
+        if (contractType === 'LONG_TERM') {
+          endDate.setFullYear(endDate.getFullYear() + 1);
+        } else {
+          endDate.setMonth(endDate.getMonth() + faker.number.int({ min: 1, max: 6 }));
+        }
+        
+        const contract = await prisma.contract.create({
+          data: {
+            name: contractType === 'LONG_TERM' ? 'Annual Lease' : 'Short-term Rental',
+            renterId: renterToAssign[i].id,
+            roomId: occupiedRooms[i].id,
+            startDate,
+            endDate,
+            amount: occupiedRooms[i].price,
+            securityDeposit: occupiedRooms[i].price * (contractType === 'LONG_TERM' ? 2 : 1),
+            contractType,
+            status: faker.helpers.arrayElement(['ACTIVE', 'ACTIVE', 'ACTIVE', 'PENDING']),
+            document: `https://example.com/contracts/contract_${i}.pdf`,
+          },
+        });
+        
+        // Create payments for contracts
+        const today = new Date();
+        const contractMonths = Math.max(1, Math.floor((today.getTime() - startDate.getTime()) / (30 * 24 * 60 * 60 * 1000)));
+        
+        // Past payments
+        for (let j = 0; j < contractMonths; j++) {
+          const dueDate = new Date(startDate);
+          dueDate.setMonth(dueDate.getMonth() + j);
+          
+          if (dueDate > today) continue;
+          
+          const paidDate = new Date(dueDate);
+          const isLate = faker.datatype.boolean() && faker.datatype.boolean(); // 25% chance of late payment
+          
+          if (isLate) {
+            paidDate.setDate(paidDate.getDate() + faker.number.int({ min: 1, max: 10 }));
+          } else {
+            paidDate.setDate(paidDate.getDate() - faker.number.int({ min: 0, max: 5 }));
           }
           
           await prisma.payment.create({
             data: {
-              amount: occupiedRooms[1].price,
-              status: i < 3 ? 'PAID' : 'PENDING',
+              amount: occupiedRooms[i].price,
+              status: 'PAID',
               type: 'RENT',
               dueDate,
               paidDate,
-              description: `Monthly rent for ${dueDate.toLocaleString('default', { month: 'long' })} ${dueDate.getFullYear()}`,
-              renterId: renter2.id,
-              contractId: contract2.id,
+              description: `Monthly rent for ${dueDate.toLocaleString('default', { month: 'long', year: 'numeric' })}`,
+              renterId: renterToAssign[i].id,
+              contractId: contract.id,
             },
           });
         }
         
-        console.log(`Created payments for renter2`);
-      }
-    }
-
-    // Create documents for renters
-    await prisma.document.create({
-      data: {
-        name: 'ID Card',
-        type: 'ID_CARD',
-        path: 'https://example.com/documents/id_card_1.pdf',
-        renterId: renter1.id,
-      },
-    });
-
-    await prisma.document.create({
-      data: {
-        name: 'Passport',
-        type: 'PASSPORT',
-        path: 'https://example.com/documents/passport_2.pdf',
-        renterId: renter2.id,
-      },
-    });
-
-    console.log('Created documents for renters');
-
-    // Create services
-    const services = [
-      {
-        name: 'Internet',
-        description: 'High-speed fiber internet',
-        fee: 30,
-        feeType: 'MONTHLY',
-        icon: 'wifi',
-      },
-      {
-        name: 'Cleaning',
-        description: 'Weekly cleaning service',
-        fee: 50,
-        feeType: 'MONTHLY',
-        icon: 'cleaning',
-      },
-      {
-        name: 'Laundry',
-        description: 'Laundry service',
-        fee: 25,
-        feeType: 'MONTHLY',
-        icon: 'laundry',
-      },
-      {
-        name: 'Parking',
-        description: 'Parking space',
-        fee: 40,
-        feeType: 'MONTHLY',
-        icon: 'car',
-      },
-      {
-        name: 'Key Replacement',
-        description: 'Replacement for lost keys',
-        fee: 20,
-        feeType: 'ONE_TIME',
-        icon: 'key',
-      },
-    ];
-
-    for (const serviceData of services) {
-      await prisma.service.create({
-        data: serviceData as any,
-      });
-    }
-
-    console.log('Created services');
-
-    // Add services to rooms
-    const allServices = await prisma.service.findMany();
-    const allRooms = await prisma.room.findMany({
-      where: {
-        status: 'OCCUPIED',
-      },
-    });
-
-    if (allRooms.length > 0 && allServices.length > 0) {
-      // Add internet to first room
-      const internetService = allServices.find(s => s.name === 'Internet');
-      if (internetService && allRooms[0]) {
-        const roomService = await prisma.roomService.create({
-          data: {
-            roomId: allRooms[0].id,
-            serviceId: internetService.id,
-            status: 'ACTIVE',
-          },
-        });
-
-        console.log(`Added internet service to room ${allRooms[0].name}`);
-
-        // Create payment for service
-        await prisma.payment.create({
-          data: {
-            amount: internetService.fee,
-            status: 'PENDING',
-            type: 'SERVICE',
-            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Due in 7 days
-            description: `Internet service for ${allRooms[0].name}`,
-            renterId: renter1.id,
-            roomServiceId: roomService.id,
-          },
-        });
-      }
-
-      // Add cleaning to first room
-      const cleaningService = allServices.find(s => s.name === 'Cleaning');
-      if (cleaningService && allRooms[0]) {
-        await prisma.roomService.create({
-          data: {
-            roomId: allRooms[0].id,
-            serviceId: cleaningService.id,
-            status: 'ACTIVE',
-          },
-        });
-
-        console.log(`Added cleaning service to room ${allRooms[0].name}`);
-      }
-    }
-
-    // Create maintenance events
-    const maintenanceEvents = [
-      {
-        title: 'Fix leaking faucet',
-        description: 'The bathroom faucet has a slow leak that needs repair',
-        status: 'PENDING',
-        priority: 'MEDIUM',
-        scheduledDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days from now
-      },
-      {
-        title: 'Replace AC filter',
-        description: 'Regular maintenance - replace air conditioner filter',
-        status: 'PENDING',
-        priority: 'LOW',
-        scheduledDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-      },
-      {
-        title: 'Fix broken window',
-        description: 'Window in bedroom does not close properly',
-        status: 'IN_PROGRESS',
-        priority: 'HIGH',
-        scheduledDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // Yesterday
-      },
-    ];
-
-    if (allRooms.length > 0) {
-      for (let i = 0; i < Math.min(maintenanceEvents.length, allRooms.length); i++) {
-        await prisma.maintenanceEvent.create({
-          data: {
-            ...maintenanceEvents[i] as any,
-            roomId: allRooms[i].id,
-          },
-        });
-
-        // If this is a maintenance event, update room status to MAINTENANCE
-        if (maintenanceEvents[i].priority === 'HIGH') {
-          await prisma.room.update({
-            where: { id: allRooms[i].id },
-            data: { status: 'MAINTENANCE' },
+        // Add upcoming payment if contract is still active
+        if (contract.status === 'ACTIVE' && endDate > today) {
+          const upcomingDueDate = new Date(today);
+          upcomingDueDate.setDate(1); // First day of month
+          upcomingDueDate.setMonth(upcomingDueDate.getMonth() + 1); // Next month
+          
+          await prisma.payment.create({
+            data: {
+              amount: occupiedRooms[i].price,
+              status: 'PENDING',
+              type: 'RENT',
+              dueDate: upcomingDueDate,
+              description: `Monthly rent for ${upcomingDueDate.toLocaleString('default', { month: 'long', year: 'numeric' })}`,
+              renterId: renterToAssign[i].id,
+              contractId: contract.id,
+            },
           });
         }
+        
+        console.log(`Created contract and payments for renter ${renterToAssign[i].name} in room ${occupiedRooms[i].name}`);
       }
     }
+    
+    console.log('Assigned renters to rooms and created contracts');
 
-    console.log('Created maintenance events');
+    // Create documents for renters
+    const docTypes: DocumentType[] = ['ID_CARD', 'PASSPORT', 'CONTRACT', 'OTHER'];
+    let documentCount = 0;
+    
+    for (const renter of renters) {
+      const numDocs = faker.number.int({ min: 1, max: 3 }); // 1-3 documents per renter
+      
+      for (let i = 0; i < numDocs; i++) {
+        await prisma.document.create({
+          data: {
+            name: faker.helpers.arrayElement([
+              'ID Card', 'Passport', 'Lease Agreement', 
+              'Employment Verification', 'Bank Statement',
+              'Reference Letter', 'Pet Certificate'
+            ]),
+            type: faker.helpers.arrayElement(docTypes),
+            path: `https://example.com/documents/doc_${renter.id}_${i}.pdf`,
+            renterId: renter.id,
+          },
+        });
+        documentCount++;
+      }
+    }
+    console.log(`Created ${documentCount} documents for renters`);
+
+    // Create services
+    const serviceNames = [
+      'Wi-Fi', 'Cleaning', 'Laundry', 'Parking', 'Pet Fee',
+      'Room Key Replacement', 'Storage', 'Gym Access', 'Pool Access',
+      'Cable TV', 'Concierge', 'Breakfast', 'Utilities', 'Furniture Rental'
+    ];
+    
+    const serviceIcons = [
+      'wifi', 'clean', 'laundry', 'parking', 'pet',
+      'key', 'box', 'dumbbell', 'pool',
+      'tv', 'bell', 'coffee', 'bolt', 'chair'
+    ];
+    
+    const feeTypes: FeeType[] = ['ONE_TIME', 'MONTHLY', 'YEARLY'];
+    
+    const services: Service[] = [];
+    for (let i = 0; i < Math.min(serviceNames.length, NUM_SERVICES); i++) {
+      const feeType = i < 3 ? 'ONE_TIME' : (i < 10 ? 'MONTHLY' : 'YEARLY');
+      
+      const service = await prisma.service.create({
+        data: {
+          name: serviceNames[i],
+          description: `${serviceNames[i]} service for residents`,
+          fee: 10 + Math.floor(Math.random() * 90),
+          feeType: feeType as FeeType,
+          icon: serviceIcons[i],
+          active: true,
+        },
+      });
+      
+      services.push(service);
+    }
+    console.log(`Created ${services.length} services`);
+
+    // Add services to rooms
+    let roomServiceCount = 0;
+    for (const room of occupiedRooms) {
+      const monthlyServices = services.filter(s => s.feeType === 'MONTHLY');
+      const numServices = faker.number.int({ min: 1, max: Math.min(3, monthlyServices.length) });
+      
+      // Select random services
+      const selectedServices = faker.helpers.arrayElements(monthlyServices, numServices);
+      
+      for (const service of selectedServices) {
+        await prisma.roomService.create({
+          data: {
+            roomId: room.id,
+            serviceId: service.id,
+            status: faker.helpers.arrayElement(['ACTIVE', 'ACTIVE', 'ACTIVE', 'INACTIVE']),
+            startDate: faker.date.past({ years: 1 }),
+          },
+        });
+        roomServiceCount++;
+      }
+    }
+    console.log(`Added ${roomServiceCount} services to occupied rooms`);
 
     // Create expenses
-    const expenses = [
-      {
-        name: 'Property Insurance',
-        amount: 1200,
-        date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000), // 15 days ago
-        category: 'INSURANCE',
-        description: 'Annual property insurance premium',
-      },
-      {
-        name: 'Plumbing Repairs',
-        amount: 350,
-        date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
-        category: 'MAINTENANCE',
-        description: 'Emergency plumbing repairs',
-      },
-      {
-        name: 'Landscaping',
-        amount: 200,
-        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-        category: 'MAINTENANCE',
-        description: 'Monthly landscaping service',
-      },
-      {
-        name: 'Property Tax',
-        amount: 2500,
-        date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
-        category: 'TAXES',
-        description: 'Quarterly property tax payment',
-      },
-      {
-        name: 'Utilities',
-        amount: 450,
-        date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-        category: 'UTILITIES',
-        description: 'Monthly utilities for common areas',
-      },
-    ];
-
-    for (const expenseData of expenses) {
+    const expenseCategories = ['MAINTENANCE', 'UTILITIES', 'TAXES', 'INSURANCE', 'SALARY', 'SUPPLIES', 'MARKETING', 'OTHER'];
+    
+    for (let i = 0; i < NUM_EXPENSES; i++) {
+      const category = faker.helpers.arrayElement(expenseCategories);
+      const date = faker.date.past({ years: 1 });
+      
       await prisma.expense.create({
-        data: expenseData as any,
+        data: {
+          name: `${category.charAt(0) + category.slice(1).toLowerCase()} - ${faker.commerce.productName()}`,
+          amount: 50 + Math.floor(Math.random() * 2000),
+          date,
+          category: category as any,
+          description: faker.lorem.sentence(),
+          receipt: faker.datatype.boolean() ? `https://example.com/receipts/receipt_${i}.pdf` : null,
+        },
       });
     }
+    
+    console.log(`Created ${NUM_EXPENSES} expenses`);
 
-    console.log('Created expenses');
+    // Create maintenance events
+    const maintenancePriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+    const maintenanceStatuses = ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+    
+    // Find rooms in maintenance status
+    const maintenanceRooms = rooms.filter(room => room.status === 'MAINTENANCE');
+    
+    // Create maintenance events for rooms with MAINTENANCE status
+    for (const room of maintenanceRooms) {
+      await prisma.maintenanceEvent.create({
+        data: {
+          title: faker.helpers.arrayElement([
+            'Plumbing Issue', 'Electrical Problem', 'Heating System Failure',
+            'AC Repair', 'Broken Window', 'Door Lock Replacement'
+          ]),
+          description: faker.lorem.paragraph(),
+          status: faker.helpers.arrayElement(['PENDING', 'IN_PROGRESS']),
+          priority: faker.helpers.arrayElement(['HIGH', 'URGENT']),
+          roomId: room.id,
+          scheduledDate: faker.date.recent(),
+        },
+      });
+    }
+    
+    // Create additional maintenance events for other rooms
+    const otherRooms = rooms.filter(room => room.status !== 'MAINTENANCE');
+    const roomsForMaintenance = faker.helpers.arrayElements(otherRooms, NUM_MAINTENANCE_EVENTS - maintenanceRooms.length);
+    
+    for (const room of roomsForMaintenance) {
+      const status = faker.helpers.arrayElement(maintenanceStatuses);
+      const scheduledDate = status === 'COMPLETED' ? 
+        faker.date.past({ years: 0.2 }) : 
+        faker.date.soon({ days: 30 });
+      
+      await prisma.maintenanceEvent.create({
+        data: {
+          title: faker.helpers.arrayElement([
+            'Regular Maintenance', 'Inspection', 'Pest Control',
+            'Painting', 'Flooring Repair', 'Furniture Replacement',
+            'Deep Cleaning', 'Appliance Service'
+          ]),
+          description: faker.lorem.paragraph(),
+          status: status as any,
+          priority: faker.helpers.arrayElement(maintenancePriorities) as any,
+          roomId: room.id,
+          scheduledDate,
+          completedDate: status === 'COMPLETED' ? faker.date.between({ from: scheduledDate, to: new Date() }) : null,
+          cost: status === 'COMPLETED' ? 50 + Math.floor(Math.random() * 500) : null,
+          notes: status === 'COMPLETED' ? faker.lorem.sentences(2) : null,
+        },
+      });
+    }
+    
+    console.log(`Created ${maintenanceRooms.length + roomsForMaintenance.length} maintenance events`);
 
-    console.log('Seeding completed successfully');
+    // Create events and notifications
+    const eventTypes = ['ONE_TIME', 'MONTHLY', 'CONTRACT_EXPIRY', 'PAYMENT_DUE'];
+    const notifyMethods = ['EMAIL', 'ZALO', 'SMS', 'IN_APP'];
+    
+    // Create event for contract expiry
+    const contractExpiryEvent = await prisma.event.create({
+      data: {
+        name: 'Contract Expiry Reminder',
+        message: 'Your contract will expire soon. Please contact us to discuss renewal options.',
+        description: 'Automated reminder for contracts expiring within 30 days',
+        eventType: 'CONTRACT_EXPIRY',
+        notifyBy: ['EMAIL', 'IN_APP'],
+        active: true,
+        nextRun: faker.date.soon({ days: 7 }),
+        createdById: admin.id,
+      },
+    });
+
+    // Create event for payment due
+    const paymentDueEvent = await prisma.event.create({
+      data: {
+        name: 'Payment Due Reminder',
+        message: 'Your rent payment is due soon. Please make your payment on time to avoid late fees.',
+        description: 'Automated reminder for upcoming rent payments',
+        eventType: 'PAYMENT_DUE',
+        notifyBy: ['EMAIL', 'SMS', 'IN_APP'],
+        active: true,
+        nextRun: faker.date.soon({ days: 3 }),
+        createdById: admin.id,
+      },
+    });
+
+    // Create monthly maintenance notification
+    const maintenanceEvent = await prisma.event.create({
+      data: {
+        name: 'Monthly Maintenance Notice',
+        message: 'We will be conducting regular maintenance in your building. Please ensure access to common areas.',
+        description: 'Monthly notification for regular building maintenance',
+        eventType: 'MONTHLY',
+        scheduleDay: 15, // 15th of each month
+        notifyBy: ['EMAIL'],
+        active: true,
+        nextRun: (() => {
+          const date = new Date();
+          date.setDate(15);
+          if (date.getDate() < 15) {
+            date.setMonth(date.getMonth() + 1);
+          }
+          return date;
+        })(),
+        createdById: admin.id,
+      },
+    });
+
+    // Add event targets
+    let targetCount = 0;
+    
+    // Add targets to contract expiry event
+    const rentershWithContracts = await prisma.renter.findMany({
+      where: {
+        contracts: {
+          some: {
+            status: 'ACTIVE'
+          }
+        }
+      },
+      take: 10
+    });
+    
+    for (const renter of rentershWithContracts) {
+      await prisma.eventTarget.create({
+        data: {
+          eventId: contractExpiryEvent.id,
+          renterId: renter.id,
+        },
+      });
+      targetCount++;
+    }
+    
+    // Add targets to payment due event
+    const rentershWithPayments = await prisma.renter.findMany({
+      where: {
+        payments: {
+          some: {
+            status: 'PENDING'
+          }
+        }
+      },
+      take: 15
+    });
+    
+    for (const renter of rentershWithPayments) {
+      await prisma.eventTarget.create({
+        data: {
+          eventId: paymentDueEvent.id,
+          renterId: renter.id,
+        },
+      });
+      targetCount++;
+    }
+    
+    // Add targets to maintenance event (target rooms)
+    const randomRooms = faker.helpers.arrayElements(rooms, 5);
+    
+    for (const room of randomRooms) {
+      await prisma.eventTarget.create({
+        data: {
+          eventId: maintenanceEvent.id,
+          roomId: room.id,
+        },
+      });
+      targetCount++;
+    }
+
+    console.log(`Created 3 events with ${targetCount} targets`);
+
+    console.log('✅ Enhanced seeding completed successfully');
+    
   } catch (error) {
-    console.error('Error during seeding:', error);
+    console.error('❌ Seeding failed:', error);
+    throw error;
   } finally {
     await prisma.$disconnect();
   }
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => {
-    prisma.$disconnect();
-  }); 
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+}); 

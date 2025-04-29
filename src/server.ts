@@ -1,3 +1,9 @@
+#!/usr/bin/env node
+
+/**
+ * Server startup file for the Property Management System GraphQL API
+ */
+
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -36,6 +42,8 @@ const port = process.env.PORT || 5001;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+app.use(helmet({ contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false }));
+app.use(cors());
 
 // Root route
 app.get('/', (req: Request, res: Response) => {
@@ -54,6 +62,14 @@ app.get('/health', (req: Request, res: Response) => {
     message: 'Server is running',
     timestamp: new Date().toISOString(),
   });
+});
+
+// Rate limiting for GraphQL
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  message: 'Too many requests from this IP, please try again after 15 minutes'
 });
 
 // Start the Apollo Server with Express
@@ -82,6 +98,7 @@ async function startApolloServer() {
   app.use(
     '/graphql',
     cors(),
+    limiter,
     express.json(),
     expressMiddleware(server, {
       context: async ({ req }) => createContext({ req })

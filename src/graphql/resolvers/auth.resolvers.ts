@@ -83,9 +83,23 @@ export const authResolvers = {
             name: input.name,
             email: input.email,
             password: hashedPassword,
-            role: 'USER', // Default role
           },
         });
+
+        // Find default role
+        const defaultRole = await ctx.prisma.role.findFirst({
+          where: { isDefault: true },
+        });
+
+        if (defaultRole) {
+          // Assign default role to user
+          await ctx.prisma.userRole.create({
+            data: {
+              userId: user.id,
+              roleId: defaultRole.id,
+            },
+          });
+        }
 
         // Generate JWT token
         const token = jwt.sign(
@@ -223,17 +237,27 @@ export const authResolvers = {
         // Find user
         const user = await ctx.prisma.user.findUnique({
           where: { id: ctx.user.id },
+          include: {
+            userRoles: {
+              include: {
+                role: true
+              }
+            }
+          }
         });
 
         if (!user) {
           throw new Error('User not found');
         }
 
+        // Get user roles
+        const roles = user.userRoles.map(ur => ur.role.name);
+
         return {
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role,
+          roles
         };
       } catch (error: any) {
         throw new Error(error.message || 'An error occurred while fetching user');

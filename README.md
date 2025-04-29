@@ -11,6 +11,10 @@ This is the backend API for the Property Management System, built with Node.js, 
 - File uploads for documents and images
 - Email notifications
 - Advanced filtering, sorting, and pagination
+- Role-based access control system
+- Data migration utilities
+
+> **IMPORTANT UPDATE**: We've migrated to a GraphQL-only API. The REST API endpoints have been removed. See `REST_TO_GRAPHQL_MIGRATION.md` for details on this transition.
 
 ## Tech Stack
 
@@ -19,7 +23,7 @@ This is the backend API for the Property Management System, built with Node.js, 
 - **Prisma**: ORM for database operations
 - **PostgreSQL**: Primary database
 - **JWT**: For authentication
-- **GraphQL**: For data querying
+- **GraphQL**: For data querying (now the exclusive API interface)
 - **Apollo Server**: GraphQL server implementation
 - **Zod**: For validation
 - **Multer**: For file uploads
@@ -218,6 +222,8 @@ mutation UpdateRenter {
 
 ## Project Structure
 
+> **Note**: All REST API related files have been removed, including routes, controllers, and validation schemas. The codebase now exclusively supports GraphQL.
+
 ```
 /backend
 │
@@ -234,11 +240,10 @@ mutation UpdateRenter {
 │   │
 │   ├── /config             # Configuration files
 │   ├── /constants          # Constants and enums
-│   ├── /middlewares        # Express middlewares
+│   ├── /middleware         # Express middlewares
 │   ├── /services           # Reusable services
 │   ├── /types              # TypeScript type definitions
 │   ├── /utils              # Utility functions
-│   ├── /validators         # Request/response validators
 │   │
 │   └── server.ts           # Main server file
 │
@@ -249,12 +254,101 @@ mutation UpdateRenter {
 └── package.json            # Dependencies and scripts
 ```
 
-## Testing
+## Database Management
 
-Run tests with:
+### Prisma Setup
+
+The application uses Prisma as an ORM with PostgreSQL. Key Prisma components:
+
+- **schema.prisma**: Defines all database models, relationships, and enums
+- **migrations/**: Directory containing all database migrations
+- **client**: Generated Prisma client for type-safe database access
+
+### Data Models
+
+The Prisma schema includes models for:
+
+- **User**: User accounts with authentication details
+- **Role & Permission**: Role-based access control system
+- **Property**: Properties managed by users
+- **Room**: Individual rooms/units in properties
+- **Renter**: Tenants who rent rooms
+- **Contract**: Lease agreements between renters and property managers
+- **Document**: Files and attachments related to renters
+- **Payment**: Payment records for contracts
+- **Service**: Services offered for rooms (WiFi, cleaning, etc.)
+- **Expense**: Property-related expenses
+- **MaintenanceEvent**: Maintenance tasks and history
+- **Subscription & SubscriptionPlan**: User subscription management
+
+### Database Utilities
+
+The `/scripts` directory contains several utilities for database management:
+
+#### Seeding
+
+- **seed.ts**: Seeds the database with initial test data
+- **enhanced-seed.ts**: Creates more comprehensive test data with related records
 
 ```bash
-npm test
+# Run the seeder
+npm run seed
+```
+
+#### Data Migration
+
+- **model-migration.js**: Handles schema changes and data transformation
+  - Sets up default roles and permissions
+  - Migrates users to the role-based system
+  - Transforms data for updated field types (e.g., boolean to enum)
+
+```bash
+# Run after schema changes to migrate data
+node scripts/model-migration.js
+```
+
+#### Database Operations
+
+- **db-backup.js**: Creates timestamped database backups
+- **db-restore.js**: Restores the database from a backup
+- **db-migrate.js**: Migrates data between environments (dev/staging/prod)
+
+```bash
+# Create a database backup
+node scripts/db-backup.js
+
+# Restore from a backup
+node scripts/db-restore.js
+
+# Migrate data between environments
+node scripts/db-migrate.js --source=prod --target=dev
+```
+
+For more details on the database utilities, see the [scripts/README.md](./scripts/README.md) file.
+
+## Environment-Specific Database Configuration
+
+For database operations across environments, set these variables in your `.env`:
+
+```
+# Environment-specific databases
+DEV_DATABASE_NAME=property_management_dev
+DEV_DATABASE_USER=postgres
+DEV_DATABASE_HOST=localhost
+DEV_DATABASE_PORT=5432
+DEV_DATABASE_PASSWORD=your_password
+
+STAGING_DATABASE_NAME=property_management_staging
+STAGING_DATABASE_USER=postgres
+STAGING_DATABASE_HOST=staging-server
+STAGING_DATABASE_PORT=5432
+STAGING_DATABASE_PASSWORD=your_password
+
+PROD_DATABASE_NAME=property_management
+PROD_DATABASE_USER=postgres
+PROD_DATABASE_HOST=production-server
+PROD_DATABASE_PORT=5432
+PROD_DATABASE_PASSWORD=your_password
 ```
 
 ## License

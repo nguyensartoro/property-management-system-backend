@@ -90,6 +90,34 @@ node db-migrate.js --help
 - Comprehensive logging of all migration operations
 - Error handling with clear messages
 
+## Model Migration Script
+
+The `model-migration.js` script helps with data migration when the Prisma schema changes, ensuring data consistency across schema updates.
+
+### Usage
+
+```bash
+# Run the migration script after applying schema changes
+node model-migration.js
+```
+
+### Features
+
+- Migrates contract data from old `isLongTerm` boolean to new `contractType` enum
+- Creates default roles (ADMIN, USER, PROPERTY_MANAGER) for the new role-based access control system
+- Sets up permissions for different resources and actions
+- Migrates existing users to the new role system based on their legacy role
+- Provides detailed logging of migration steps
+- Error handling with clear messages
+
+### When to Use
+
+Use this script after running Prisma migrations that involve:
+- Changing field types (like boolean to enum)
+- Adding new models that need default data (like roles and permissions)
+- Implementing many-to-many relationships that require populating junction tables
+- Any other schema change that requires data transformation
+
 ## Environment Variables
 
 The scripts use the following environment variables from the `.env` file:

@@ -12,13 +12,62 @@ model User {
   email             String              @unique
   password          String
   name              String
-  role              Role                @default(USER)
   avatar            String?
+  isRenter          Boolean             @default(false)  // Flag to identify if user is a renter
+  renterId          String?             @unique          // Reference to Renter if this is a renter account
+  renter            Renter?             @relation(fields: [renterId], references: [id])
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
-  properties        Property[]
+  properties        Property[]          // One user can have many properties
   subscription      Subscription?
   userPreferences   UserPreference?
+  userRoles         UserRole[]          // Many-to-many relationship with Role
+  createdEvents     Event[]             // Events created by this user
+  eventTargets      EventTarget[]       // Events targeting this user
+}
+
+model Role {
+  id          String            @id @default(uuid())
+  name        String            @unique
+  description String?
+  isDefault   Boolean           @default(false)  // Whether this role is assigned by default
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  userRoles   UserRole[]        // Many-to-many with User
+  permissions RolePermission[]  // Many-to-many with Permission
+}
+
+model Permission {
+  id          String            @id @default(uuid())
+  name        String            @unique
+  description String?
+  resource    String            // Which resource this permission applies to (rooms, tenants, etc.)
+  action      String            // The action allowed (create, read, update, delete, etc.)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  roles       RolePermission[]  // Many-to-many with Role
+}
+
+// Junction table for User-Role many-to-many relationship
+model UserRole {
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  role        Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  roleId      String
+  assignedAt  DateTime          @default(now())
+
+  @@id([userId, roleId])
+}
+
+// Junction table for Role-Permission many-to-many relationship
+model RolePermission {
+  role        Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  roleId      String
+  permission  Permission        @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  permissionId String
+  assignedAt  DateTime          @default(now())
+
+  @@id([roleId, permissionId])
 }
 
 model UserPreference {
@@ -68,7 +117,7 @@ model Property {
   user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
-  rooms             Room[]
+  rooms             Room[]              // One property can have many rooms
 }
 
 model Room {
@@ -81,7 +130,7 @@ model Room {
   status            RoomStatus          @default(AVAILABLE)
   price             Float
   images            String[]
-  propertyId        String
+  propertyId        String              // Each room belongs to exactly one property
   property          Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
@@ -89,6 +138,7 @@ model Room {
   contracts         Contract[]
   maintenanceEvents MaintenanceEvent[]
   roomServices      RoomService[]
+  eventTargets      EventTarget[]       // Events targeting this room
 }
 
 model Renter {
@@ -105,6 +155,47 @@ model Renter {
   updatedAt         DateTime            @updatedAt
   contracts         Contract[]
   payments          Payment[]
+  eventTargets      EventTarget[]       // Events targeting this renter
+  userAccount       User?               // Link to User if this renter has an account
+}
+
+model Event {
+  id            String           @id @default(uuid())
+  name          String
+  message       String           @db.Text
+  description   String?          @db.Text
+  eventType     EventType        @default(ONE_TIME)
+  scheduleDate  DateTime?        // For ONE_TIME events
+  scheduleDay   Int?             // Day of month for MONTHLY events (1-31)
+  scheduleTime  String?          // Time of day for the event (HH:MM format)
+  notifyBy      NotifyMethod[]   // Array of notification methods
+  active        Boolean          @default(true)
+  lastRun       DateTime?        // When the event was last executed
+  nextRun       DateTime?        // When the event is scheduled to run next
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  createdBy     User             @relation(fields: [createdById], references: [id])
+  createdById   String
+  targets       EventTarget[]    // Targets for this event
+}
+
+// Junction table for Event targets (can target rooms, renters, or users)
+model EventTarget {
+  id          String           @id @default(uuid())
+  event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId     String
+  // Target can be one of these (only one should be set)
+  room        Room?            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId      String?
+  renter      Renter?          @relation(fields: [renterId], references: [id], onDelete: Cascade)
+  renterId    String?
+  user        User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String?
+  // For tracking notifications
+  lastNotified DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@unique([eventId, roomId, renterId, userId], name: "unique_event_target")
 }
 
 model Document {
@@ -129,7 +220,7 @@ model Contract {
   endDate           DateTime
   amount            Float
   securityDeposit   Float?
-  isLongTerm        Boolean             @default(true)
+  contractType      ContractType        @default(LONG_TERM)
   status            ContractStatus      @default(ACTIVE)
   terminationReason String?
   terminationDate   DateTime?
@@ -210,11 +301,6 @@ model MaintenanceEvent {
   notes             String?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
-}
-
-enum Role {
-  ADMIN
-  USER
 }
 
 enum RoomStatus {
@@ -300,4 +386,25 @@ enum SubscriptionStatus {
 enum BillingCycle {
   MONTHLY
   YEARLY
-} 
+}
+
+enum ContractType {
+  LONG_TERM
+  SHORT_TERM
+}
+
+enum EventType {
+  ONE_TIME
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+  CONTRACT_EXPIRY    // Special type for events tied to contract expiration
+  PAYMENT_DUE        // Special type for payment reminders
+}
+
+enum NotifyMethod {
+  EMAIL
+  ZALO
+  SMS
+  IN_APP
+}
