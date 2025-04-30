@@ -10,7 +10,19 @@ export const typeDefs = gql`
   type Query {
     # Auth queries
     me: User
-    
+    users: UserRenterList
+
+    # Property queries
+    property(id: ID!): Property
+    properties(
+      page: Int
+      limit: Int
+      search: String
+      userId: ID
+      sortBy: String
+      sortOrder: String
+    ): PropertyConnection
+
     # Room queries
     room(id: ID!): Room
     rooms(
@@ -39,8 +51,57 @@ export const typeDefs = gql`
       renterId: ID
     ): DocumentConnection
 
-    # Other entity queries
-    # Add when implementing those features
+    # Contract queries
+    contract(id: ID!): Contract
+    contracts(
+      page: Int
+      limit: Int
+      roomId: ID
+      renterId: ID
+      status: String
+      sortBy: String
+      sortOrder: String
+    ): ContractConnection
+
+    # Service queries
+    service(id: ID!): Service
+    services(
+      page: Int
+      limit: Int
+      active: Boolean
+      feeType: String
+      sortBy: String
+      sortOrder: String
+    ): ServiceConnection
+
+    # Payment queries
+    payment(id: ID!): Payment
+    payments(
+      page: Int
+      limit: Int
+      renterId: ID
+      contractId: ID
+      status: String
+      type: String
+      fromDate: String
+      toDate: String
+      sortBy: String
+      sortOrder: String
+    ): PaymentConnection
+
+    # Maintenance queries
+    maintenanceEvent(id: ID!): MaintenanceEvent
+    maintenanceEvents(
+      page: Int
+      limit: Int
+      roomId: ID
+      status: String
+      priority: String
+      fromDate: String
+      toDate: String
+      sortBy: String
+      sortOrder: String
+    ): MaintenanceEventConnection
   }
 
   type Mutation {
@@ -49,7 +110,12 @@ export const typeDefs = gql`
     register(input: RegisterInput!): AuthPayload
     refreshToken(refreshToken: String!): TokenPayload
     changePassword(currentPassword: String!, newPassword: String!): Boolean
-    
+
+    # Property mutations
+    createProperty(input: CreatePropertyInput!): Property
+    updateProperty(id: ID!, input: UpdatePropertyInput!): Property
+    deleteProperty(id: ID!): Boolean
+
     # Room mutations
     createRoom(input: CreateRoomInput!): Room
     updateRoom(id: ID!, input: UpdateRoomInput!): Room
@@ -65,8 +131,27 @@ export const typeDefs = gql`
     updateDocument(id: ID!, input: UpdateDocumentInput!): Document
     deleteDocument(id: ID!): Boolean
 
-    # Other entity mutations
-    # Add when implementing those features
+    # Contract mutations
+    createContract(input: CreateContractInput!): Contract
+    updateContract(id: ID!, input: UpdateContractInput!): Contract
+    terminateContract(id: ID!, reason: String!, terminationDate: DateTime): Contract
+    deleteContract(id: ID!): Boolean
+
+    # Service mutations
+    createService(input: CreateServiceInput!): Service
+    updateService(id: ID!, input: UpdateServiceInput!): Service
+    deleteService(id: ID!): Boolean
+
+    # Payment mutations
+    createPayment(input: CreatePaymentInput!): Payment
+    updatePayment(id: ID!, input: UpdatePaymentInput!): Payment
+    deletePayment(id: ID!): Boolean
+    markPaymentAsPaid(id: ID!, paidDate: DateTime, reference: String): Payment
+
+    # Maintenance mutations
+    createMaintenanceEvent(input: CreateMaintenanceEventInput!): MaintenanceEvent
+    updateMaintenanceEvent(id: ID!, input: UpdateMaintenanceEventInput!): MaintenanceEvent
+    deleteMaintenanceEvent(id: ID!): Boolean
   }
 
   # Auth types
@@ -90,6 +175,28 @@ export const typeDefs = gql`
     refreshToken: String!
   }
 
+  # Types for user query
+  type UserRenterList {
+    users: [UserWithRole!]!
+    renters: [RenterBasic!]!
+  }
+
+  type UserWithRole {
+    id: ID!
+    name: String!
+    email: String!
+    roles: [String!]!
+    type: String!
+  }
+
+  type RenterBasic {
+    id: ID!
+    name: String!
+    email: String
+    phone: String!
+    type: String!
+  }
+
   input RegisterInput {
     name: String!
     email: String!
@@ -103,6 +210,11 @@ export const typeDefs = gql`
     totalPages: Int!
     totalCount: Int!
     currentPage: Int!
+  }
+
+  type PropertyConnection {
+    nodes: [Property!]!
+    pageInfo: PageInfo!
   }
 
   type RoomConnection {
@@ -120,48 +232,92 @@ export const typeDefs = gql`
     pageInfo: PageInfo!
   }
 
+  type ContractConnection {
+    nodes: [Contract!]!
+    pageInfo: PageInfo!
+  }
+
+  type ServiceConnection {
+    nodes: [Service!]!
+    pageInfo: PageInfo!
+  }
+
+  type PaymentConnection {
+    nodes: [Payment!]!
+    pageInfo: PageInfo!
+  }
+
+  type MaintenanceEventConnection {
+    nodes: [MaintenanceEvent!]!
+    pageInfo: PageInfo!
+  }
+
+  # Property type and inputs
+  type Property {
+    id: ID!
+    name: String!
+    address: String!
+    userId: ID!
+    user: User
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    rooms: [Room]
+    roomCount: Int
+    vacantRoomCount: Int
+    occupiedRoomCount: Int
+  }
+
+  input CreatePropertyInput {
+    name: String!
+    address: String!
+    userId: ID
+  }
+
+  input UpdatePropertyInput {
+    name: String
+    address: String
+  }
+
   # Room type and inputs
   type Room {
     id: ID!
     number: String!
     name: String
     description: String
-    floor: String
+    floor: Int
     status: String!
     price: Float!
     size: Float
-    type: String
-    facilities: [String]
     images: [String]
+    propertyId: ID!
     createdAt: DateTime!
     updatedAt: DateTime!
     renters: [Renter]
     contracts: [Contract]
+    maintenanceEvents: [MaintenanceEvent]
+    roomServices: [RoomService]
   }
 
   input CreateRoomInput {
     number: String!
     name: String
     description: String
-    floor: String
+    floor: Int
     status: String!
     price: Float!
     size: Float
-    type: String
-    facilities: [String]
     images: [String]
+    propertyId: ID!
   }
 
   input UpdateRoomInput {
     number: String
     name: String
     description: String
-    floor: String
+    floor: Int
     status: String
     price: Float
     size: Float
-    type: String
-    facilities: [String]
     images: [String]
   }
 
@@ -205,8 +361,7 @@ export const typeDefs = gql`
     id: ID!
     name: String!
     type: String!
-    fileUrl: String!
-    description: String
+    path: String!
     renterId: ID!
     createdAt: DateTime!
     updatedAt: DateTime!
@@ -216,43 +371,202 @@ export const typeDefs = gql`
   input CreateDocumentInput {
     name: String!
     type: String!
-    fileUrl: String!
-    description: String
+    path: String!
     renterId: ID!
   }
 
   input UpdateDocumentInput {
     name: String
     type: String
-    fileUrl: String
-    description: String
+    path: String
   }
 
-  # Contract type (placeholder)
+  # Contract type and inputs
   type Contract {
     id: ID!
+    name: String!
     renterId: ID!
     roomId: ID!
     startDate: DateTime!
     endDate: DateTime!
-    contractType: String!
     amount: Float!
+    securityDeposit: Float
+    contractType: String!
     status: String!
+    terminationReason: String
+    terminationDate: DateTime
+    document: String
     createdAt: DateTime!
     updatedAt: DateTime!
+    renter: Renter
+    room: Room
+    payments: [Payment]
+    documents: [Document]
   }
 
-  # Payment type (placeholder)
-  type Payment {
-    id: ID!
+  input CreateContractInput {
+    name: String!
     renterId: ID!
-    contractId: ID
+    roomId: ID!
+    startDate: DateTime!
+    endDate: DateTime!
     amount: Float!
-    status: String!
-    paymentDate: DateTime!
-    dueDate: DateTime!
-    method: String
+    securityDeposit: Float
+    contractType: String
+    status: String
+    document: String
+  }
+
+  input UpdateContractInput {
+    name: String
+    startDate: DateTime
+    endDate: DateTime
+    amount: Float
+    securityDeposit: Float
+    contractType: String
+    status: String
+    terminationReason: String
+    terminationDate: DateTime
+    document: String
+  }
+
+  # Service type and inputs
+  type Service {
+    id: ID!
+    name: String!
+    description: String
+    fee: Float!
+    feeType: String!
+    icon: String
+    active: Boolean!
     createdAt: DateTime!
     updatedAt: DateTime!
+    roomServices: [RoomService]
+  }
+
+  input CreateServiceInput {
+    name: String!
+    description: String
+    fee: Float!
+    feeType: String!
+    icon: String
+    active: Boolean
+  }
+
+  input UpdateServiceInput {
+    name: String
+    description: String
+    fee: Float
+    feeType: String
+    icon: String
+    active: Boolean
+  }
+
+  # RoomService type and inputs
+  type RoomService {
+    id: ID!
+    roomId: ID!
+    serviceId: ID!
+    startDate: DateTime!
+    endDate: DateTime
+    status: String!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    room: Room
+    service: Service
+    payments: [Payment]
+  }
+
+  input CreateRoomServiceInput {
+    roomId: ID!
+    serviceId: ID!
+    startDate: DateTime!
+    endDate: DateTime
+    status: String
+  }
+
+  input UpdateRoomServiceInput {
+    startDate: DateTime
+    endDate: DateTime
+    status: String
+  }
+
+  # Payment type and inputs
+  type Payment {
+    id: ID!
+    amount: Float!
+    status: String!
+    type: String!
+    dueDate: DateTime!
+    paidDate: DateTime
+    description: String
+    renterId: ID!
+    contractId: ID
+    roomServiceId: ID
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    renter: Renter
+    contract: Contract
+    roomService: RoomService
+  }
+
+  input CreatePaymentInput {
+    amount: Float!
+    status: String
+    type: String!
+    dueDate: DateTime!
+    paidDate: DateTime
+    description: String
+    renterId: ID!
+    contractId: ID
+    roomServiceId: ID
+  }
+
+  input UpdatePaymentInput {
+    amount: Float
+    status: String
+    type: String
+    dueDate: DateTime
+    paidDate: DateTime
+    description: String
+  }
+
+  # MaintenanceEvent type and inputs
+  type MaintenanceEvent {
+    id: ID!
+    title: String!
+    description: String!
+    status: String!
+    priority: String!
+    roomId: ID!
+    scheduledDate: DateTime
+    completedDate: DateTime
+    cost: Float
+    notes: String
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    room: Room
+  }
+
+  input CreateMaintenanceEventInput {
+    title: String!
+    description: String!
+    status: String
+    priority: String
+    roomId: ID!
+    scheduledDate: DateTime
+    cost: Float
+    notes: String
+  }
+
+  input UpdateMaintenanceEventInput {
+    title: String
+    description: String
+    status: String
+    priority: String
+    scheduledDate: DateTime
+    completedDate: DateTime
+    cost: Float
+    notes: String
   }
 `;

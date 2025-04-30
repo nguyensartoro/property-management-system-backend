@@ -16,6 +16,13 @@ export const authResolvers = {
         // Find user by email
         const user = await ctx.prisma.user.findUnique({
           where: { email },
+          include: {
+            userRoles: {
+              include: {
+                role: true
+              }
+            }
+          }
         });
 
         // Check if user exists
@@ -27,6 +34,12 @@ export const authResolvers = {
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
           throw new Error('Invalid credentials');
+        }
+
+        // Get the primary role (or default to 'USER')
+        let userRole = 'USER';
+        if (user.userRoles && user.userRoles.length > 0) {
+          userRole = user.userRoles[0].role.name;
         }
 
         // Generate JWT token
@@ -49,6 +62,7 @@ export const authResolvers = {
             id: user.id,
             name: user.name,
             email: user.email,
+            role: userRole,
           },
           token,
           refreshToken,
@@ -91,6 +105,8 @@ export const authResolvers = {
           where: { isDefault: true },
         });
 
+        let userRole = 'USER';
+
         if (defaultRole) {
           // Assign default role to user
           await ctx.prisma.userRole.create({
@@ -99,6 +115,8 @@ export const authResolvers = {
               roleId: defaultRole.id,
             },
           });
+
+          userRole = defaultRole.name;
         }
 
         // Generate JWT token
@@ -121,6 +139,7 @@ export const authResolvers = {
             id: user.id,
             name: user.name,
             email: user.email,
+            role: userRole,
           },
           token,
           refreshToken,
@@ -224,7 +243,6 @@ export const authResolvers = {
       }
     },
   },
-
   Query: {
     // Get current user
     me: async (_: any, __: any, ctx: GraphQLContext) => {
@@ -261,6 +279,80 @@ export const authResolvers = {
         };
       } catch (error: any) {
         throw new Error(error.message || 'An error occurred while fetching user');
+      }
+    },
+
+    // Get all users (admin) or renters (user)
+    users: async (_: any, __: any, ctx: GraphQLContext) => {
+      try {
+        // Check if user is authenticated
+        if (!ctx.user?.id) {
+          throw new Error('Not authenticated');
+        }
+        console.log(ctx.user.role, "** ctx.user.role **");
+
+
+        // If user is admin, return all users
+        if (ctx.user.role === 'ADMIN') {
+          const users = await ctx.prisma.user.findMany({
+            include: {
+              userRoles: {
+                include: {
+                  role: true
+                }
+              }
+            }
+          });
+
+          const renters = await ctx.prisma.renter.findMany();
+
+          return {
+            users: users.map(user => ({
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              roles: user.userRoles.map(ur => ur.role.name),
+              type: 'USER'
+            })),
+            renters: renters.map(renter => ({
+              id: renter.id,
+              name: renter.name,
+              email: renter.email || null,
+              phone: renter.phone,
+              type: 'RENTER'
+            }))
+          };
+        } else {
+          // If user is not admin, return only renters associated with their properties
+          const properties = await ctx.prisma.property.findMany({
+            where: { userId: ctx.user.id }
+          });
+
+          const propertyIds = properties.map(property => property.id);
+
+          const rooms = await ctx.prisma.room.findMany({
+            where: { propertyId: { in: propertyIds } }
+          });
+
+          const roomIds = rooms.map(room => room.id);
+
+          const renters = await ctx.prisma.renter.findMany({
+            where: { roomId: { in: roomIds } }
+          });
+
+          return {
+            users: [],
+            renters: renters.map(renter => ({
+              id: renter.id,
+              name: renter.name,
+              email: renter.email || null,
+              phone: renter.phone,
+              type: 'RENTER'
+            }))
+          };
+        }
+      } catch (error: any) {
+        throw new Error(error.message || 'An error occurred while fetching users');
       }
     },
   },

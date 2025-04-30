@@ -18,9 +18,6 @@ import { ApolloServerPluginLandingPageLocalDefault, ApolloServerPluginLandingPag
 import http from 'http';
 import { graphqlSchema } from './graphql/schema';
 import { createContext, GraphQLContext } from './graphql/context';
-// Use require for non-TypeScript modules
-const depthLimit = require('graphql-depth-limit');
-
 // Load environment variables
 dotenv.config();
 
@@ -98,7 +95,7 @@ async function startApolloServer() {
   app.use(
     '/graphql',
     cors(),
-    limiter,
+    // limiter,
     express.json(),
     expressMiddleware(server, {
       context: async ({ req }) => createContext({ req })

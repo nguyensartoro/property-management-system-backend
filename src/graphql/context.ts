@@ -22,59 +22,57 @@ export interface GraphQLContext {
 // Extract token from request headers
 const getToken = (req: Request): string | null => {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader) {
     return null;
   }
-  
+
   const [bearer, token] = authHeader.split(' ');
-  
+
   if (bearer !== 'Bearer' || !token) {
     return null;
   }
-  
+
   return token;
 };
 
 // Verify JWT token and get user
 const getUserFromToken = async (token: string, prisma: PrismaClient): Promise<User | null> => {
   try {
-    // Get JWT secret from environment variables
-    const jwtSecret = process.env.JWT_SECRET;
-    
-    if (!jwtSecret) {
-      console.error('JWT_SECRET is not defined in environment variables');
-      return null;
-    }
-    
-    // Verify token
+    // Use the same secret and fallback as token generation
+    const jwtSecret = process.env.JWT_SECRET || 'default_secret';
+
     const decoded = jwt.verify(token, jwtSecret) as { userId: string };
-    
+
     if (!decoded.userId) {
       return null;
     }
-    
-    // Find user in database
+
+    // Find user in database with their roles
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId }
+      where: { id: decoded.userId },
+      include: {
+        userRoles: {
+          include: {
+            role: true
+          }
+        }
+      }
     });
-    
+
     if (!user) {
       return null;
     }
-    
-    // Determine role based on user properties
+
+    // Get the primary role (or default to 'USER')
     let role: 'USER' | 'PROPERTY_MANAGER' | 'ADMIN' = 'USER';
-    
-    // This assumes you have some way to determine roles in your system
-    // Modify this logic according to your actual user model structure
-    if (user.isRenter === false) {
-      role = 'PROPERTY_MANAGER';
+    if (user.userRoles && user.userRoles.length > 0) {
+      const primaryRole = user.userRoles[0].role.name;
+      if (primaryRole === 'ADMIN' || primaryRole === 'PROPERTY_MANAGER') {
+        role = primaryRole;
+      }
     }
-    
-    // You might have a separate admin flag or another way to determine admin role
-    // This is placeholder logic that should be adjusted to your actual data model
-    
+
     return {
       id: user.id,
       email: user.email,
@@ -90,7 +88,7 @@ const getUserFromToken = async (token: string, prisma: PrismaClient): Promise<Us
 export const createContext = async ({ req }: { req: Request }): Promise<GraphQLContext> => {
   const token = getToken(req);
   const user = token ? await getUserFromToken(token, prisma) : null;
-  
+
   return {
     prisma,
     user,
@@ -99,4 +97,4 @@ export const createContext = async ({ req }: { req: Request }): Promise<GraphQLC
 };
 
 // Export Prisma client for use outside of GraphQL context
-export { prisma }; 
+export { prisma };

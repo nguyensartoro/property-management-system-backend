@@ -5,43 +5,40 @@ import { roomResolvers } from './room.resolvers';
 import { renterResolvers } from './renter.resolvers';
 import { documentResolvers } from './document.resolvers';
 import { authResolvers } from './auth.resolvers';
+import { contractResolvers } from './contract.resolvers';
+import { serviceResolvers } from './service.resolvers';
+import { paymentResolvers } from './payment.resolvers';
+import { maintenanceResolvers } from './maintenance.resolvers';
+import { propertyResolvers } from './property.resolvers';
+import { merge } from 'lodash';
 
-// Combine all resolvers
-export const resolvers = {
-  // Scalars
+// Create base resolver object with scalars
+const baseResolvers = {
   ...scalars,
   
-  // Root resolvers
-  Query: {
-    // Auth queries
-    ...authResolvers.Query,
-    
-    // Room queries
-    ...roomResolvers.Query,
-    
-    // Renter queries
-    ...renterResolvers.Query,
-    
-    // Document queries
-    ...documentResolvers.Query,
-  },
-  
-  Mutation: {
-    // Auth mutations
-    ...authResolvers.Mutation,
-    
-    // Room mutations
-    ...roomResolvers.Mutation,
-    
-    // Renter mutations
-    ...renterResolvers.Mutation,
-    
-    // Document mutations
-    ...documentResolvers.Mutation,
-  },
+  Query: {},
+  Mutation: {},
   
   // Type resolvers
   Room: roomResolvers.Room,
   Renter: renterResolvers.Renter,
   Document: documentResolvers.Document,
-}; 
+  Contract: contractResolvers.Contract,
+  Service: serviceResolvers.Service,
+  Payment: paymentResolvers.Payment,
+  MaintenanceEvent: maintenanceResolvers.MaintenanceEvent,
+};
+
+// Combine all resolvers using merge to avoid overwriting
+export const resolvers = merge(
+  baseResolvers,
+  { Query: authResolvers.Query, Mutation: authResolvers.Mutation },
+  { Query: roomResolvers.Query, Mutation: roomResolvers.Mutation },
+  { Query: renterResolvers.Query, Mutation: renterResolvers.Mutation },
+  { Query: documentResolvers.Query, Mutation: documentResolvers.Mutation },
+  { Query: contractResolvers.Query, Mutation: contractResolvers.Mutation },
+  { Query: serviceResolvers.Query, Mutation: serviceResolvers.Mutation },
+  { Query: paymentResolvers.Query, Mutation: paymentResolvers.Mutation },
+  { Query: maintenanceResolvers.Query, Mutation: maintenanceResolvers.Mutation },
+  propertyResolvers
+); 
