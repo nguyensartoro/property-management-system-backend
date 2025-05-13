@@ -20,7 +20,7 @@ export const contractResolvers = {
         const contract = await ctx.prisma.contract.findUnique({
           where: { id },
           include: {
-            renter: true,
+            renters: true,
             room: true,
             payments: true
           }
@@ -69,8 +69,8 @@ export const contractResolvers = {
     ) => {
       const resolverName = 'contracts';
       try {
-        resolverLogger.log(resolverName, { 
-          page, limit, search, roomId, renterId, status, dateFrom, dateTo 
+        resolverLogger.log(resolverName, {
+          page, limit, search, roomId, renterId, status, dateFrom, dateTo
         }, getUserId(ctx));
 
         // Check authentication
@@ -81,13 +81,13 @@ export const contractResolvers = {
         // Build where clause for filters
         const where: any = {
           ...(roomId && { roomId }),
-          ...(renterId && { renterId }),
+          ...(renterId && { renters: { some: { id: renterId } } } ),
           ...(status && { status: status as ContractStatus }),
           ...(type && { type }),
           ...(search && {
             OR: [
               { name: { contains: search, mode: 'insensitive' } },
-              { renter: { name: { contains: search, mode: 'insensitive' } } },
+              { renters: { some: { name: { contains: search, mode: 'insensitive' } } } },
               { room: { number: { contains: search, mode: 'insensitive' } } }
             ],
           }),
@@ -121,7 +121,7 @@ export const contractResolvers = {
           where,
           orderBy: { [sortBy]: sortOrder },
           include: {
-            renter: true,
+            renters: true,
             room: true,
             payments: true
           }
@@ -154,17 +154,22 @@ export const contractResolvers = {
         // Validate required fields
         const requiredFields = [
           { field: 'name', message: 'Name is required' },
-          { field: 'renterId', message: 'Renter is required' },
+          { field: 'renterIds', message: 'Renter is required' },
           { field: 'roomId', message: 'Room is required' },
           { field: 'startDate', message: 'Start date is required' },
           { field: 'endDate', message: 'End date is required' },
           { field: 'amount', message: 'Amount is required' },
         ];
-        
+
         for (const { field, message } of requiredFields) {
           if (!input[field]) {
             throw new Error(message);
           }
+        }
+
+        // Validate input, permissions, etc.
+        if (!input.renterIds || !Array.isArray(input.renterIds) || input.renterIds.length === 0) {
+          throw new Error('At least one renter is required');
         }
 
         // Handle contract creation with transaction to ensure room status is updated together
@@ -182,13 +187,13 @@ export const contractResolvers = {
             throw new Error(`Room is currently ${room.status.toLowerCase()}`);
           }
 
-          // Check if renter exists
-          const renter = await prisma.renter.findUnique({
-            where: { id: input.renterId }
+          // Check if renters exist
+          const renters = await prisma.renter.findMany({
+            where: { id: { in: input.renterIds } }
           });
 
-          if (!renter) {
-            throw new Error('Renter not found');
+          if (renters.length !== input.renterIds.length) {
+            throw new Error('One or more renters not found');
           }
 
           // Update room status to OCCUPIED
@@ -201,9 +206,14 @@ export const contractResolvers = {
 
           // Create the contract
           const createdContract = await prisma.contract.create({
-            data: input,
+            data: {
+              ...input,
+              renters: {
+                connect: input.renterIds.map((id: string) => ({ id })),
+              },
+            },
             include: {
-              renter: true,
+              renters: true,
               room: true
             }
           });
@@ -237,7 +247,7 @@ export const contractResolvers = {
         // Check if contract exists
         const existingContract = await ctx.prisma.contract.findUnique({
           where: { id },
-          include: { renter: true, room: true }
+          include: { renters: true, room: true }
         });
 
         if (!existingContract) {
@@ -251,7 +261,7 @@ export const contractResolvers = {
             where: { id },
             data: input,
             include: {
-              renter: true,
+              renters: true,
               room: true
             }
           });
@@ -263,8 +273,7 @@ export const contractResolvers = {
               where: {
                 id: { not: id },
                 roomId: updated.roomId,
-                renterId: updated.renterId,
-                status: 'ACTIVE'
+                renters: { some: { id: { in: updated.renters.map(r => r.id) } } }
               }
             }) === 0;
 
@@ -332,13 +341,13 @@ export const contractResolvers = {
     // Terminate a contract
     terminateContract: async (
       _: any,
-      { 
-        id, 
-        reason, 
-        terminationDate = new Date() 
-      }: { 
-        id: string; 
-        reason?: string; 
+      {
+        id,
+        reason,
+        terminationDate = new Date()
+      }: {
+        id: string;
+        reason?: string;
         terminationDate?: Date;
       },
       ctx: GraphQLContext
@@ -361,7 +370,7 @@ export const contractResolvers = {
         const contract = await ctx.prisma.contract.findUnique({
           where: { id },
           include: {
-            renter: true,
+            renters: true,
             room: true
           }
         });
@@ -386,7 +395,7 @@ export const contractResolvers = {
               terminationDate
             },
             include: {
-              renter: true,
+              renters: true,
               room: true
             }
           });
@@ -396,8 +405,7 @@ export const contractResolvers = {
             where: {
               id: { not: id },
               roomId: contract.roomId,
-              renterId: contract.renterId,
-              status: 'ACTIVE'
+              renters: { some: { id: { in: updated.renters.map(r => r.id) } } }
             }
           }) === 0;
 
@@ -425,12 +433,10 @@ export const contractResolvers = {
 
   // Contract type resolvers
   Contract: {
-    // Resolver for renter field
-    renter: async (parent: Contract, _: any, ctx: GraphQLContext) => {
-      if (!parent.renterId) return null;
-      return ctx.prisma.renter.findUnique({
-        where: { id: parent.renterId }
-      });
+    renters: async (parent: any, _: any, ctx: GraphQLContext) => {
+      return ctx.prisma.contract
+        .findUnique({ where: { id: parent.id } })
+        .renters();
     },
 
     // Resolver for room field
@@ -443,9 +449,23 @@ export const contractResolvers = {
 
     // Resolver for documents field - get documents via renter
     documents: async (parent: Contract, _: any, ctx: GraphQLContext) => {
-      if (!parent.renterId) return [];
+      let renterIds: string[] = [];
+      const parentWithRenters = parent as any;
+      if (parentWithRenters.renters && Array.isArray(parentWithRenters.renters) && parentWithRenters.renters.length > 0) {
+        renterIds = parentWithRenters.renters.map((r: any) => r.id);
+      } else {
+        // Fetch contract with renters if not already populated
+        const contractWithRenters = await ctx.prisma.contract.findUnique({
+          where: { id: parent.id },
+          include: { renters: true }
+        });
+        if (contractWithRenters && contractWithRenters.renters.length > 0) {
+          renterIds = contractWithRenters.renters.map((r: any) => r.id);
+        }
+      }
+      if (renterIds.length === 0) return [];
       return ctx.prisma.document.findMany({
-        where: { renterId: parent.renterId }
+        where: { renterId: { in: renterIds } }
       });
     },
 
@@ -456,4 +476,4 @@ export const contractResolvers = {
       });
     },
   },
-}; 
+};

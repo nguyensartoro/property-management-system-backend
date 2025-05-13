@@ -8,6 +8,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import { rateLimit } from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
@@ -38,9 +39,13 @@ const port = process.env.PORT || 5001;
 // Apply basic middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 app.use(morgan('dev'));
 app.use(helmet({ contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false }));
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  credentials: true
+}));
 
 // Root route
 app.get('/', (req: Request, res: Response) => {
@@ -94,11 +99,15 @@ async function startApolloServer() {
   // Apply middleware AFTER Apollo Server is started
   app.use(
     '/graphql',
-    cors(),
+    cors({
+      origin: ['http://localhost:5173', 'http://localhost:5174'],
+      credentials: true
+    }),
     // limiter,
+    cookieParser(),
     express.json(),
     expressMiddleware(server, {
-      context: async ({ req }) => createContext({ req })
+      context: async ({ req, res }) => createContext({ req: Object.assign(req, { res }) })
     })
   );
 

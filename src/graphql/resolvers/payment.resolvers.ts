@@ -178,7 +178,11 @@ export const paymentResolvers = {
           }
 
           // Verify the contract belongs to the renter
-          if (contract.renterId !== input.renterId) {
+          let contractWithRenters = contract as any;
+          if (!contractWithRenters.renters) {
+            contractWithRenters = await ctx.prisma.contract.findUnique({ where: { id: contract.id }, include: { renters: true } });
+          }
+          if (!contractWithRenters.renters.some((r: any) => r.id === input.renterId)) {
             throw new Error('Contract does not belong to the specified renter');
           }
         }
@@ -252,7 +256,11 @@ export const paymentResolvers = {
 
           // If renter is not changing, verify the contract belongs to the current renter
           const renterId = input.renterId || payment.renterId;
-          if (contract.renterId !== renterId) {
+          let contractWithRenters = contract as any;
+          if (!contractWithRenters.renters) {
+            contractWithRenters = await ctx.prisma.contract.findUnique({ where: { id: contract.id }, include: { renters: true } });
+          }
+          if (!contractWithRenters.renters.some((r: any) => r.id === renterId)) {
             throw new Error('Contract does not belong to the renter');
           }
         }

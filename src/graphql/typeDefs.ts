@@ -28,7 +28,11 @@ export const typeDefs = gql`
     rooms(
       page: Int
       limit: Int
+      search: String
+      type: String
       status: String
+      minPrice: Float
+      maxPrice: Float
       sortBy: String
       sortOrder: String
     ): RoomConnection
@@ -102,6 +106,9 @@ export const typeDefs = gql`
       sortBy: String
       sortOrder: String
     ): MaintenanceEventConnection
+
+    # ThemeSettings queries
+    themeSettings(userId: ID!): ThemeSettings
   }
 
   type Mutation {
@@ -110,6 +117,7 @@ export const typeDefs = gql`
     register(input: RegisterInput!): AuthPayload
     refreshToken(refreshToken: String!): TokenPayload
     changePassword(currentPassword: String!, newPassword: String!): Boolean
+    logout: LogoutResponse
 
     # Property mutations
     createProperty(input: CreatePropertyInput!): Property
@@ -152,6 +160,11 @@ export const typeDefs = gql`
     createMaintenanceEvent(input: CreateMaintenanceEventInput!): MaintenanceEvent
     updateMaintenanceEvent(id: ID!, input: UpdateMaintenanceEventInput!): MaintenanceEvent
     deleteMaintenanceEvent(id: ID!): Boolean
+
+    # ThemeSettings mutations
+    createThemeSettings(input: CreateThemeSettingsInput!): ThemeSettings
+    updateThemeSettings(id: ID!, input: UpdateThemeSettingsInput!): ThemeSettings
+    deleteThemeSettings(id: ID!): Boolean
   }
 
   # Auth types
@@ -162,12 +175,16 @@ export const typeDefs = gql`
     role: String!
     createdAt: DateTime!
     updatedAt: DateTime!
+    themeSettings: ThemeSettings
   }
 
   type AuthPayload {
     user: User!
-    token: String!
-    refreshToken: String!
+    success: Boolean!
+  }
+
+  type LogoutResponse {
+    success: Boolean!
   }
 
   type TokenPayload {
@@ -201,6 +218,7 @@ export const typeDefs = gql`
     name: String!
     email: String!
     password: String!
+    isRenter: Boolean
   }
 
   # Connection types for pagination
@@ -282,6 +300,7 @@ export const typeDefs = gql`
   type Room {
     id: ID!
     number: String!
+    type: String
     name: String
     description: String
     floor: Int
@@ -292,10 +311,10 @@ export const typeDefs = gql`
     propertyId: ID!
     createdAt: DateTime!
     updatedAt: DateTime!
-    renters: [Renter]
-    contracts: [Contract]
-    maintenanceEvents: [MaintenanceEvent]
-    roomServices: [RoomService]
+    renters: [Renter!]!
+    contracts: [Contract!]!
+    maintenanceEvents: [MaintenanceEvent!]!
+    roomServices: [RoomService!]!
   }
 
   input CreateRoomInput {
@@ -398,8 +417,8 @@ export const typeDefs = gql`
     document: String
     createdAt: DateTime!
     updatedAt: DateTime!
-    renter: Renter
-    room: Room
+    renters: [Renter!]!
+    room: Room!
     payments: [Payment]
     documents: [Document]
   }
@@ -568,5 +587,32 @@ export const typeDefs = gql`
     completedDate: DateTime
     cost: Float
     notes: String
+  }
+
+  # ThemeSettings type and inputs
+  type ThemeSettings {
+    id: ID!
+    userId: ID!
+    fontSize: String!
+    fontFamily: String!
+    colorScheme: String!
+    darkMode: Boolean!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  input CreateThemeSettingsInput {
+    userId: ID!
+    fontSize: String
+    fontFamily: String
+    colorScheme: String
+    darkMode: Boolean
+  }
+
+  input UpdateThemeSettingsInput {
+    fontSize: String
+    fontFamily: String
+    colorScheme: String
+    darkMode: Boolean
   }
 `;

@@ -300,20 +300,16 @@ async function main() {
       if (occupiedRooms[i].status === 'OCCUPIED') {
         const contractTypes: ContractType[] = ['LONG_TERM', 'SHORT_TERM'];
         const contractType = faker.helpers.arrayElement(contractTypes);
-        
         const startDate = faker.date.past({ years: 1 });
         const endDate = new Date(startDate);
-        
         if (contractType === 'LONG_TERM') {
           endDate.setFullYear(endDate.getFullYear() + 1);
         } else {
           endDate.setMonth(endDate.getMonth() + faker.number.int({ min: 1, max: 6 }));
         }
-        
         const contract = await prisma.contract.create({
           data: {
             name: contractType === 'LONG_TERM' ? 'Annual Lease' : 'Short-term Rental',
-            renterId: renterToAssign[i].id,
             roomId: occupiedRooms[i].id,
             startDate,
             endDate,
@@ -322,6 +318,9 @@ async function main() {
             contractType,
             status: faker.helpers.arrayElement(['ACTIVE', 'ACTIVE', 'ACTIVE', 'PENDING']),
             document: `https://example.com/contracts/contract_${i}.pdf`,
+            renters: {
+              connect: [{ id: renterToAssign[i].id }]
+            }
           },
         });
         

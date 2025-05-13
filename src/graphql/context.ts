@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 
 // Create a new Prisma client instance
@@ -16,11 +16,16 @@ export interface User {
 export interface GraphQLContext {
   prisma: PrismaClient;
   user: User | null;
-  req: Request;
+  req: Request & { res?: Response };
 }
 
-// Extract token from request headers
+// Get token from cookies
 const getToken = (req: Request): string | null => {
+  if (req.cookies && req.cookies.token) {
+    return req.cookies.token;
+  }
+
+  // Fallback to Authorization header for backwards compatibility
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
@@ -85,7 +90,7 @@ const getUserFromToken = async (token: string, prisma: PrismaClient): Promise<Us
 };
 
 // Create context for each request
-export const createContext = async ({ req }: { req: Request }): Promise<GraphQLContext> => {
+export const createContext = async ({ req }: { req: Request & { res?: Response } }): Promise<GraphQLContext> => {
   const token = getToken(req);
   const user = token ? await getUserFromToken(token, prisma) : null;
 

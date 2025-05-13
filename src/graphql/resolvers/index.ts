@@ -10,6 +10,7 @@ import { serviceResolvers } from './service.resolvers';
 import { paymentResolvers } from './payment.resolvers';
 import { maintenanceResolvers } from './maintenance.resolvers';
 import { propertyResolvers } from './property.resolvers';
+import { themeSettingsResolvers } from './themeSettings.resolvers';
 import { merge } from 'lodash';
 
 // Create base resolver object with scalars
@@ -40,5 +41,7 @@ export const resolvers = merge(
   { Query: serviceResolvers.Query, Mutation: serviceResolvers.Mutation },
   { Query: paymentResolvers.Query, Mutation: paymentResolvers.Mutation },
   { Query: maintenanceResolvers.Query, Mutation: maintenanceResolvers.Mutation },
-  propertyResolvers
+  propertyResolvers,
+  { Query: themeSettingsResolvers.Query, Mutation: themeSettingsResolvers.Mutation },
+  { User: themeSettingsResolvers.User }
 ); 

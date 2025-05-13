@@ -1,313 +1,321 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
-model User {
-  id                String              @id @default(uuid())
-  email             String              @unique
-  password          String
+model Contract {
+  id                String         @id
   name              String
-  avatar            String?
-  isRenter          Boolean             @default(false)  // Flag to identify if user is a renter
-  renterId          String?             @unique          // Reference to Renter if this is a renter account
-  renter            Renter?             @relation(fields: [renterId], references: [id])
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  properties        Property[]          // One user can have many properties
-  subscription      Subscription?
-  userPreferences   UserPreference?
-  userRoles         UserRole[]          // Many-to-many relationship with Role
-  createdEvents     Event[]             // Events created by this user
-  eventTargets      EventTarget[]       // Events targeting this user
+  roomId            String
+  amount            Float
+  securityDeposit   Float?
+  status            ContractStatus @default(ACTIVE)
+  terminationReason String?
+  terminationDate   DateTime?
+  document          String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime
+  contractType      ContractType   @default(LONG_TERM)
+  endDate           DateTime?
+  startDate         DateTime?
+  Room              Room           @relation(fields: [roomId], references: [id])
+  Payment           Payment[]
+  Renter            Renter[]       @relation("ContractRenters")
 }
 
-model Role {
-  id          String            @id @default(uuid())
-  name        String            @unique
+model Document {
+  id        String       @id
+  name      String
+  type      DocumentType
+  path      String
+  renterId  String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime
+  Renter    Renter       @relation(fields: [renterId], references: [id], onDelete: Cascade)
+}
+
+model Event {
+  id           String         @id
+  name         String
+  message      String
+  description  String?
+  eventType    EventType      @default(ONE_TIME)
+  scheduleDate DateTime?
+  scheduleDay  Int?
+  scheduleTime String?
+  notifyBy     NotifyMethod[]
+  active       Boolean        @default(true)
+  lastRun      DateTime?
+  nextRun      DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime
+  createdById  String
+  User         User           @relation(fields: [createdById], references: [id])
+  EventTarget  EventTarget[]
+}
+
+model EventTarget {
+  id           String    @id
+  eventId      String
+  roomId       String?
+  renterId     String?
+  userId       String?
+  lastNotified DateTime?
+  createdAt    DateTime  @default(now())
+  Event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  Renter       Renter?   @relation(fields: [renterId], references: [id], onDelete: Cascade)
+  Room         Room?     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  User         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, roomId, renterId, userId])
+}
+
+model Expense {
+  id          String          @id
+  name        String
+  amount      Float
+  date        DateTime
+  category    ExpenseCategory
   description String?
-  isDefault   Boolean           @default(false)  // Whether this role is assigned by default
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  userRoles   UserRole[]        // Many-to-many with User
-  permissions RolePermission[]  // Many-to-many with Permission
+  receipt     String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime
+}
+
+model MaintenanceEvent {
+  id            String              @id
+  title         String
+  description   String
+  status        MaintenanceStatus   @default(PENDING)
+  priority      MaintenancePriority @default(MEDIUM)
+  roomId        String
+  scheduledDate DateTime?
+  completedDate DateTime?
+  cost          Float?
+  notes         String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime
+  Room          Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id            String        @id
+  amount        Float
+  status        PaymentStatus @default(PENDING)
+  type          PaymentType
+  dueDate       DateTime
+  paidDate      DateTime?
+  description   String?
+  renterId      String
+  contractId    String?
+  roomServiceId String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime
+  Contract      Contract?     @relation(fields: [contractId], references: [id])
+  Renter        Renter        @relation(fields: [renterId], references: [id], onDelete: Cascade)
+  RoomService   RoomService?  @relation(fields: [roomServiceId], references: [id])
 }
 
 model Permission {
-  id          String            @id @default(uuid())
-  name        String            @unique
-  description String?
-  resource    String            // Which resource this permission applies to (rooms, tenants, etc.)
-  action      String            // The action allowed (create, read, update, delete, etc.)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  roles       RolePermission[]  // Many-to-many with Role
+  id             String           @id
+  name           String           @unique
+  description    String?
+  resource       String
+  action         String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime
+  RolePermission RolePermission[]
 }
 
-// Junction table for User-Role many-to-many relationship
-model UserRole {
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String
-  role        Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  roleId      String
-  assignedAt  DateTime          @default(now())
-
-  @@id([userId, roleId])
+model Property {
+  id        String   @id
+  name      String
+  address   String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Room      Room[]
 }
 
-// Junction table for Role-Permission many-to-many relationship
+model Renter {
+  id               String        @id
+  name             String
+  email            String?
+  phone            String
+  emergencyContact String?
+  identityNumber   String?
+  roomId           String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime
+  avatar           String?
+  Document         Document[]
+  EventTarget      EventTarget[]
+  Payment          Payment[]
+  Room             Room?         @relation(fields: [roomId], references: [id])
+  User             User?
+  Contract         Contract[]    @relation("ContractRenters")
+}
+
+model Role {
+  id             String           @id
+  name           String           @unique
+  description    String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime
+  isDefault      Boolean          @default(false)
+  RolePermission RolePermission[]
+  UserRole       UserRole[]
+}
+
 model RolePermission {
-  role        Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  roleId      String
-  permission  Permission        @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  roleId       String
   permissionId String
-  assignedAt  DateTime          @default(now())
+  assignedAt   DateTime   @default(now())
+  Permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  Role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
 }
 
-model UserPreference {
-  id                String              @id @default(uuid())
-  userId            String              @unique
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  darkMode          Boolean             @default(false)
-  fontSize          String              @default("medium")
-  colorTheme        String              @default("default")
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-}
-
-model Subscription {
-  id                String              @id @default(uuid())
-  userId            String              @unique
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  planId            String
-  plan              SubscriptionPlan    @relation(fields: [planId], references: [id])
-  status            SubscriptionStatus  @default(ACTIVE)
-  startDate         DateTime            @default(now())
-  endDate           DateTime?
-  autoRenew         Boolean             @default(true)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-}
-
-model SubscriptionPlan {
-  id                String              @id @default(uuid())
-  name              String
-  description       String
-  price             Float
-  roomLimit         Int
-  billingCycle      BillingCycle        @default(MONTHLY)
-  features          String[]
-  active            Boolean             @default(true)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  subscriptions     Subscription[]
-}
-
-model Property {
-  id                String              @id @default(uuid())
-  name              String
-  address           String
-  userId            String
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  rooms             Room[]              // One property can have many rooms
-}
-
 model Room {
-  id                String              @id @default(uuid())
-  name              String
-  number            String
-  floor             Int?
-  size              Float?
-  description       String?
-  status            RoomStatus          @default(AVAILABLE)
-  price             Float
-  images            String[]
-  propertyId        String              // Each room belongs to exactly one property
-  property          Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  renters           Renter[]
-  contracts         Contract[]
-  maintenanceEvents MaintenanceEvent[]
-  roomServices      RoomService[]
-  eventTargets      EventTarget[]       // Events targeting this room
-}
-
-model Renter {
-  id                String              @id @default(uuid())
-  name              String
-  email             String?
-  phone             String
-  emergencyContact  String?
-  identityNumber    String?
-  documents         Document[]
-  roomId            String?
-  room              Room?               @relation(fields: [roomId], references: [id])
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  contracts         Contract[]
-  payments          Payment[]
-  eventTargets      EventTarget[]       // Events targeting this renter
-  userAccount       User?               // Link to User if this renter has an account
-}
-
-model Event {
-  id            String           @id @default(uuid())
-  name          String
-  message       String           @db.Text
-  description   String?          @db.Text
-  eventType     EventType        @default(ONE_TIME)
-  scheduleDate  DateTime?        // For ONE_TIME events
-  scheduleDay   Int?             // Day of month for MONTHLY events (1-31)
-  scheduleTime  String?          // Time of day for the event (HH:MM format)
-  notifyBy      NotifyMethod[]   // Array of notification methods
-  active        Boolean          @default(true)
-  lastRun       DateTime?        // When the event was last executed
-  nextRun       DateTime?        // When the event is scheduled to run next
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  createdBy     User             @relation(fields: [createdById], references: [id])
-  createdById   String
-  targets       EventTarget[]    // Targets for this event
-}
-
-// Junction table for Event targets (can target rooms, renters, or users)
-model EventTarget {
-  id          String           @id @default(uuid())
-  event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  eventId     String
-  // Target can be one of these (only one should be set)
-  room        Room?            @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  roomId      String?
-  renter      Renter?          @relation(fields: [renterId], references: [id], onDelete: Cascade)
-  renterId    String?
-  user        User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String?
-  // For tracking notifications
-  lastNotified DateTime?
-  createdAt   DateTime         @default(now())
-
-  @@unique([eventId, roomId, renterId, userId], name: "unique_event_target")
-}
-
-model Document {
-  id                String              @id @default(uuid())
-  name              String
-  type              DocumentType
-  path              String
-  renterId          String
-  renter            Renter              @relation(fields: [renterId], references: [id], onDelete: Cascade)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-}
-
-model Contract {
-  id                String              @id @default(uuid())
-  name              String
-  renterId          String
-  renter            Renter              @relation(fields: [renterId], references: [id], onDelete: Cascade)
-  roomId            String
-  room              Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  startDate         DateTime
-  endDate           DateTime
-  amount            Float
-  securityDeposit   Float?
-  contractType      ContractType        @default(LONG_TERM)
-  status            ContractStatus      @default(ACTIVE)
-  terminationReason String?
-  terminationDate   DateTime?
-  document          String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  payments          Payment[]
-}
-
-model Service {
-  id                String              @id @default(uuid())
-  name              String
-  description       String?
-  fee               Float
-  feeType           FeeType             @default(ONE_TIME)
-  icon              String?
-  active            Boolean             @default(true)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  roomServices      RoomService[]
+  id               String             @id
+  name             String
+  number           String
+  floor            Int
+  size             Int
+  description      String?
+  status           RoomStatus         @default(AVAILABLE)
+  price            Float
+  images           String[]
+  propertyId       String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  type             String?
+  Contract         Contract[]
+  EventTarget      EventTarget[]
+  MaintenanceEvent MaintenanceEvent[]
+  Renter           Renter[]
+  Property         Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  RoomService      RoomService[]
 }
 
 model RoomService {
-  id                String              @id @default(uuid())
-  roomId            String
-  room              Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  serviceId         String
-  service           Service             @relation(fields: [serviceId], references: [id])
-  startDate         DateTime            @default(now())
-  endDate           DateTime?
-  status            ServiceStatus       @default(ACTIVE)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  payments          Payment[]
+  id        String        @id
+  roomId    String
+  serviceId String
+  startDate DateTime      @default(now())
+  endDate   DateTime?
+  status    ServiceStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime
+  Payment   Payment[]
+  Room      Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  Service   Service       @relation(fields: [serviceId], references: [id])
 }
 
-model Payment {
-  id                String              @id @default(uuid())
-  amount            Float
-  status            PaymentStatus       @default(PENDING)
-  type              PaymentType
-  dueDate           DateTime
-  paidDate          DateTime?
-  description       String?
-  renterId          String
-  renter            Renter              @relation(fields: [renterId], references: [id], onDelete: Cascade)
-  contractId        String?
-  contract          Contract?           @relation(fields: [contractId], references: [id])
-  roomServiceId     String?
-  roomService       RoomService?        @relation(fields: [roomServiceId], references: [id])
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+model Service {
+  id          String        @id
+  name        String
+  description String?
+  fee         Float
+  feeType     FeeType       @default(ONE_TIME)
+  icon        String?
+  active      Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  RoomService RoomService[]
 }
 
-model Expense {
-  id                String              @id @default(uuid())
-  name              String
-  amount            Float
-  date              DateTime
-  category          ExpenseCategory
-  description       String?
-  receipt           String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+model Subscription {
+  id               String             @id
+  userId           String             @unique
+  planId           String
+  status           SubscriptionStatus @default(ACTIVE)
+  startDate        DateTime           @default(now())
+  endDate          DateTime?
+  autoRenew        Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  SubscriptionPlan SubscriptionPlan   @relation(fields: [planId], references: [id])
+  User             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model MaintenanceEvent {
-  id                String              @id @default(uuid())
-  title             String
-  description       String
-  status            MaintenanceStatus   @default(PENDING)
-  priority          MaintenancePriority @default(MEDIUM)
-  roomId            String
-  room              Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  scheduledDate     DateTime?
-  completedDate     DateTime?
-  cost              Float?
-  notes             String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+model SubscriptionPlan {
+  id           String         @id
+  name         String
+  description  String
+  price        Float
+  roomLimit    Int
+  billingCycle BillingCycle   @default(MONTHLY)
+  features     String[]
+  active       Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime
+  Subscription Subscription[]
 }
 
-enum RoomStatus {
-  AVAILABLE
-  OCCUPIED
-  RESERVED
-  MAINTENANCE
+model ThemeSettings {
+  id          String   @id
+  userId      String   @unique
+  fontSize    String   @default("medium")
+  fontFamily  String   @default("inter")
+  colorScheme String   @default("default")
+  darkMode    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  User        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id             String          @id
+  email          String          @unique
+  password       String
+  name           String
+  avatar         String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime
+  isRenter       Boolean         @default(false)
+  renterId       String?         @unique
+  Event          Event[]
+  EventTarget    EventTarget[]
+  Property       Property[]
+  Subscription   Subscription?
+  ThemeSettings  ThemeSettings?
+  Renter         Renter?         @relation(fields: [renterId], references: [id])
+  UserPreference UserPreference?
+  UserRole       UserRole[]
+}
+
+model UserPreference {
+  id         String   @id
+  userId     String   @unique
+  darkMode   Boolean  @default(false)
+  fontSize   String   @default("medium")
+  colorTheme String   @default("default")
+  language   String   @default("en")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+  Role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
 }
 
 enum ContractStatus {
@@ -317,10 +325,35 @@ enum ContractStatus {
   TERMINATED
 }
 
+enum ContractType {
+  LONG_TERM
+  SHORT_TERM
+}
+
 enum DocumentType {
   ID_CARD
   PASSPORT
   CONTRACT
+  OTHER
+}
+
+enum EventType {
+  ONE_TIME
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+  CONTRACT_EXPIRY
+  PAYMENT_DUE
+}
+
+enum ExpenseCategory {
+  MAINTENANCE
+  UTILITIES
+  TAXES
+  INSURANCE
+  SALARY
+  SUPPLIES
+  MARKETING
   OTHER
 }
 
@@ -330,10 +363,25 @@ enum FeeType {
   YEARLY
 }
 
-enum ServiceStatus {
-  ACTIVE
-  INACTIVE
-  TERMINATED
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum MaintenanceStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum NotifyMethod {
+  EMAIL
+  ZALO
+  SMS
+  IN_APP
 }
 
 enum PaymentStatus {
@@ -351,29 +399,17 @@ enum PaymentType {
   OTHER
 }
 
-enum ExpenseCategory {
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
   MAINTENANCE
-  UTILITIES
-  TAXES
-  INSURANCE
-  SALARY
-  SUPPLIES
-  MARKETING
-  OTHER
 }
 
-enum MaintenanceStatus {
-  PENDING
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-}
-
-enum MaintenancePriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+  TERMINATED
 }
 
 enum SubscriptionStatus {
@@ -381,30 +417,4 @@ enum SubscriptionStatus {
   INACTIVE
   CANCELLED
   PENDING
-}
-
-enum BillingCycle {
-  MONTHLY
-  YEARLY
-}
-
-enum ContractType {
-  LONG_TERM
-  SHORT_TERM
-}
-
-enum EventType {
-  ONE_TIME
-  MONTHLY
-  QUARTERLY
-  ANNUALLY
-  CONTRACT_EXPIRY    // Special type for events tied to contract expiration
-  PAYMENT_DUE        // Special type for payment reminders
-}
-
-enum NotifyMethod {
-  EMAIL
-  ZALO
-  SMS
-  IN_APP
 }

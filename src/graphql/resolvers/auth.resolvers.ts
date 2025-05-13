@@ -5,6 +5,119 @@ import { SignOptions } from 'jsonwebtoken';
 
 // Authentication resolvers
 export const authResolvers = {
+  Query: {
+    // Get current user
+    me: async (_: any, __: any, ctx: GraphQLContext) => {
+      try {
+        // Check if user is authenticated
+        if (!ctx.user?.id) {
+          throw new Error('Not authenticated');
+        }
+
+        // Find user
+        const user = await ctx.prisma.user.findUnique({
+          where: { id: ctx.user.id },
+          include: {
+            userRoles: {
+              include: {
+                role: true
+              }
+            }
+          }
+        });
+
+        if (!user) {
+          throw new Error('User not found');
+        }
+
+        // Get user roles
+        const roles = user.userRoles.map(ur => ur.role.name);
+        console.log(roles, "** roles **");
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: roles[0]
+        };
+      } catch (error: any) {
+        throw new Error(error.message || 'An error occurred while fetching user');
+      }
+    },
+
+    // Get all users (admin) or renters (user)
+    users: async (_: any, __: any, ctx: GraphQLContext) => {
+      try {
+        // Check if user is authenticated
+        if (!ctx.user?.id) {
+          throw new Error('Not authenticated');
+        }
+        console.log(ctx.user.role, "** ctx.user.role **");
+
+
+        // If user is admin, return all users
+        if (ctx.user.role === 'ADMIN') {
+          const users = await ctx.prisma.user.findMany({
+            include: {
+              userRoles: {
+                include: {
+                  role: true
+                }
+              }
+            }
+          });
+
+          const renters = await ctx.prisma.renter.findMany();
+
+          return {
+            users: users.map(user => ({
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              roles: user.userRoles.map(ur => ur.role.name),
+              type: 'USER'
+            })),
+            renters: renters.map(renter => ({
+              id: renter.id,
+              name: renter.name,
+              email: renter.email || null,
+              phone: renter.phone,
+              type: 'RENTER'
+            }))
+          };
+        } else {
+          // If user is not admin, return only renters associated with their properties
+          const properties = await ctx.prisma.property.findMany({
+            where: { userId: ctx.user.id }
+          });
+
+          const propertyIds = properties.map(property => property.id);
+
+          const rooms = await ctx.prisma.room.findMany({
+            where: { propertyId: { in: propertyIds } }
+          });
+
+          const roomIds = rooms.map(room => room.id);
+
+          const renters = await ctx.prisma.renter.findMany({
+            where: { roomId: { in: roomIds } }
+          });
+
+          return {
+            users: [],
+            renters: renters.map(renter => ({
+              id: renter.id,
+              name: renter.name,
+              email: renter.email || null,
+              phone: renter.phone,
+              type: 'RENTER'
+            }))
+          };
+        }
+      } catch (error: any) {
+        throw new Error(error.message || 'An error occurred while fetching users');
+      }
+    },
+  },
   Mutation: {
     // Login mutation
     login: async (
@@ -56,7 +169,26 @@ export const authResolvers = {
           { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' } as SignOptions
         );
 
-        // Return user and tokens
+        // Set HTTP-only cookies
+        if (ctx.req.res) {
+          ctx.req.res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 24 * 60 * 60 * 1000, // 1 day
+            sameSite: 'strict',
+            path: '/'
+          });
+
+          ctx.req.res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            sameSite: 'strict',
+            path: '/'
+          });
+        }
+
+        // Return user info (but not the tokens as they're now in cookies)
         return {
           user: {
             id: user.id,
@@ -64,8 +196,7 @@ export const authResolvers = {
             email: user.email,
             role: userRole,
           },
-          token,
-          refreshToken,
+          success: true
         };
       } catch (error: any) {
         throw new Error(error.message || 'An error occurred during login');
@@ -75,7 +206,7 @@ export const authResolvers = {
     // Register mutation
     register: async (
       _: any,
-      { input }: { input: { name: string; email: string; password: string } },
+      { input }: { input: { name: string; email: string; password: string; isRenter?: boolean } },
       ctx: GraphQLContext
     ) => {
       try {
@@ -97,26 +228,75 @@ export const authResolvers = {
             name: input.name,
             email: input.email,
             password: hashedPassword,
+            isRenter: input.isRenter || false,
           },
         });
 
-        // Find default role
-        const defaultRole = await ctx.prisma.role.findFirst({
-          where: { isDefault: true },
+        // Auto-create default theme settings for the user
+        await ctx.prisma.themeSettings.create({
+          data: {
+            userId: user.id,
+            fontSize: 'medium',
+            fontFamily: 'inter',
+            colorScheme: 'default',
+            darkMode: false,
+          },
         });
 
-        let userRole = 'USER';
+        // Find appropriate role based on isRenter flag
+        const roleToAssign = await ctx.prisma.role.findFirst({
+          where: {
+            name: input.isRenter ? 'RENTER' : 'USER'
+          },
+        });
 
-        if (defaultRole) {
-          // Assign default role to user
+        // If role not found, fallback to default role
+        let roleName = roleToAssign?.name || 'USER';
+
+        if (!roleToAssign) {
+          // Find default role as fallback
+          const defaultRole = await ctx.prisma.role.findFirst({
+            where: { isDefault: true },
+          });
+
+          if (defaultRole) {
+            // Assign default role
+            await ctx.prisma.userRole.create({
+              data: {
+                userId: user.id,
+                roleId: defaultRole.id,
+              },
+            });
+            roleName = defaultRole.name;
+          }
+        } else {
+          // Assign the selected role
           await ctx.prisma.userRole.create({
             data: {
               userId: user.id,
-              roleId: defaultRole.id,
+              roleId: roleToAssign.id,
+            },
+          });
+        }
+
+        // If user is registering as renter, create a renter entry
+        if (input.isRenter) {
+          // Create renter record linked to the user
+          const renter = await ctx.prisma.renter.create({
+            data: {
+              id: user.id, // Use same ID for linked records
+              name: user.name,
+              email: user.email,
+              phone: "", // Required field but will be updated later
+              userId: user.id,
             },
           });
 
-          userRole = defaultRole.name;
+          // Update the user to link back to renter
+          await ctx.prisma.user.update({
+            where: { id: user.id },
+            data: { renterId: renter.id },
+          });
         }
 
         // Generate JWT token
@@ -133,20 +313,49 @@ export const authResolvers = {
           { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' } as SignOptions
         );
 
-        // Return user and tokens
+        // Set HTTP-only cookies
+        if (ctx.req.res) {
+          ctx.req.res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 24 * 60 * 60 * 1000, // 1 day
+            sameSite: 'strict',
+            path: '/'
+          });
+
+          ctx.req.res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            sameSite: 'strict',
+            path: '/'
+          });
+        }
+
+        // Return user info (but not the tokens as they're now in cookies)
         return {
           user: {
             id: user.id,
             name: user.name,
             email: user.email,
-            role: userRole,
+            role: roleName,
           },
-          token,
-          refreshToken,
+          success: true
         };
       } catch (error: any) {
         throw new Error(error.message || 'An error occurred during registration');
       }
+    },
+
+    // Logout mutation
+    logout: async (_: any, __: any, ctx: GraphQLContext) => {
+      if (ctx.req.res) {
+        // Clear the cookies
+        ctx.req.res.clearCookie('token', { path: '/' });
+        ctx.req.res.clearCookie('refreshToken', { path: '/' });
+      }
+
+      return { success: true };
     },
 
     // Refresh token mutation
@@ -240,119 +449,6 @@ export const authResolvers = {
         return true;
       } catch (error: any) {
         throw new Error(error.message || 'An error occurred while changing password');
-      }
-    },
-  },
-  Query: {
-    // Get current user
-    me: async (_: any, __: any, ctx: GraphQLContext) => {
-      try {
-        // Check if user is authenticated
-        if (!ctx.user?.id) {
-          throw new Error('Not authenticated');
-        }
-
-        // Find user
-        const user = await ctx.prisma.user.findUnique({
-          where: { id: ctx.user.id },
-          include: {
-            userRoles: {
-              include: {
-                role: true
-              }
-            }
-          }
-        });
-
-        if (!user) {
-          throw new Error('User not found');
-        }
-
-        // Get user roles
-        const roles = user.userRoles.map(ur => ur.role.name);
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          roles
-        };
-      } catch (error: any) {
-        throw new Error(error.message || 'An error occurred while fetching user');
-      }
-    },
-
-    // Get all users (admin) or renters (user)
-    users: async (_: any, __: any, ctx: GraphQLContext) => {
-      try {
-        // Check if user is authenticated
-        if (!ctx.user?.id) {
-          throw new Error('Not authenticated');
-        }
-        console.log(ctx.user.role, "** ctx.user.role **");
-
-
-        // If user is admin, return all users
-        if (ctx.user.role === 'ADMIN') {
-          const users = await ctx.prisma.user.findMany({
-            include: {
-              userRoles: {
-                include: {
-                  role: true
-                }
-              }
-            }
-          });
-
-          const renters = await ctx.prisma.renter.findMany();
-
-          return {
-            users: users.map(user => ({
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              roles: user.userRoles.map(ur => ur.role.name),
-              type: 'USER'
-            })),
-            renters: renters.map(renter => ({
-              id: renter.id,
-              name: renter.name,
-              email: renter.email || null,
-              phone: renter.phone,
-              type: 'RENTER'
-            }))
-          };
-        } else {
-          // If user is not admin, return only renters associated with their properties
-          const properties = await ctx.prisma.property.findMany({
-            where: { userId: ctx.user.id }
-          });
-
-          const propertyIds = properties.map(property => property.id);
-
-          const rooms = await ctx.prisma.room.findMany({
-            where: { propertyId: { in: propertyIds } }
-          });
-
-          const roomIds = rooms.map(room => room.id);
-
-          const renters = await ctx.prisma.renter.findMany({
-            where: { roomId: { in: roomIds } }
-          });
-
-          return {
-            users: [],
-            renters: renters.map(renter => ({
-              id: renter.id,
-              name: renter.name,
-              email: renter.email || null,
-              phone: renter.phone,
-              type: 'RENTER'
-            }))
-          };
-        }
-      } catch (error: any) {
-        throw new Error(error.message || 'An error occurred while fetching users');
       }
     },
   },
