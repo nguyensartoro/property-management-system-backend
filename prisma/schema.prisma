@@ -22,9 +22,9 @@ model Contract {
   contractType      ContractType   @default(LONG_TERM)
   endDate           DateTime?
   startDate         DateTime?
-  Room              Room           @relation(fields: [roomId], references: [id])
-  Payment           Payment[]
-  Renter            Renter[]       @relation("ContractRenters")
+  room              Room           @relation(fields: [roomId], references: [id])
+  payments          Payment[]
+  renters           Renter[]       @relation("ContractRenters")
 }
 
 model Document {
@@ -35,7 +35,7 @@ model Document {
   renterId  String
   createdAt DateTime     @default(now())
   updatedAt DateTime
-  Renter    Renter       @relation(fields: [renterId], references: [id], onDelete: Cascade)
+  renter    Renter       @relation(fields: [renterId], references: [id], onDelete: Cascade)
 }
 
 model Event {
@@ -54,8 +54,8 @@ model Event {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime
   createdById  String
-  User         User           @relation(fields: [createdById], references: [id])
-  EventTarget  EventTarget[]
+  user         User           @relation(fields: [createdById], references: [id])
+  eventTargets EventTarget[]
 }
 
 model EventTarget {
@@ -66,10 +66,10 @@ model EventTarget {
   userId       String?
   lastNotified DateTime?
   createdAt    DateTime  @default(now())
-  Event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  Renter       Renter?   @relation(fields: [renterId], references: [id], onDelete: Cascade)
-  Room         Room?     @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  User         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  renter       Renter?   @relation(fields: [renterId], references: [id], onDelete: Cascade)
+  room         Room?     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, roomId, renterId, userId])
 }
@@ -99,7 +99,7 @@ model MaintenanceEvent {
   notes         String?
   createdAt     DateTime            @default(now())
   updatedAt     DateTime
-  Room          Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room          Room                @relation(fields: [roomId], references: [id], onDelete: Cascade)
 }
 
 model Payment {
@@ -115,9 +115,9 @@ model Payment {
   roomServiceId String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime
-  Contract      Contract?     @relation(fields: [contractId], references: [id])
-  Renter        Renter        @relation(fields: [renterId], references: [id], onDelete: Cascade)
-  RoomService   RoomService?  @relation(fields: [roomServiceId], references: [id])
+  contract      Contract?     @relation(fields: [contractId], references: [id])
+  renter        Renter        @relation(fields: [renterId], references: [id], onDelete: Cascade)
+  roomService   RoomService?  @relation(fields: [roomServiceId], references: [id])
 }
 
 model Permission {
@@ -128,7 +128,7 @@ model Permission {
   action         String
   createdAt      DateTime         @default(now())
   updatedAt      DateTime
-  RolePermission RolePermission[]
+  rolePermissions RolePermission[]
 }
 
 model Property {
@@ -138,8 +138,8 @@ model Property {
   userId    String
   createdAt DateTime @default(now())
   updatedAt DateTime
-  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  Room      Room[]
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rooms     Room[]
 }
 
 model Renter {
@@ -153,12 +153,12 @@ model Renter {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime
   avatar           String?
-  Document         Document[]
-  EventTarget      EventTarget[]
-  Payment          Payment[]
-  Room             Room?         @relation(fields: [roomId], references: [id])
-  User             User?
-  Contract         Contract[]    @relation("ContractRenters")
+  documents        Document[]
+  eventTargets     EventTarget[]
+  payments         Payment[]
+  room             Room?         @relation(fields: [roomId], references: [id])
+  user             User?
+  contracts        Contract[]    @relation("ContractRenters")
 }
 
 model Role {
@@ -168,40 +168,40 @@ model Role {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime
   isDefault      Boolean          @default(false)
-  RolePermission RolePermission[]
-  UserRole       UserRole[]
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
 }
 
 model RolePermission {
   roleId       String
   permissionId String
   assignedAt   DateTime   @default(now())
-  Permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-  Role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
 }
 
 model Room {
-  id               String             @id
-  name             String
-  number           String
-  floor            Int
-  size             Int
-  description      String?
-  status           RoomStatus         @default(AVAILABLE)
-  price            Float
-  images           String[]
-  propertyId       String
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime
-  type             String?
-  Contract         Contract[]
-  EventTarget      EventTarget[]
-  MaintenanceEvent MaintenanceEvent[]
-  Renter           Renter[]
-  Property         Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  RoomService      RoomService[]
+  id                String             @id
+  name              String
+  number            String
+  floor             Int
+  size              Int
+  description       String?
+  status            RoomStatus         @default(AVAILABLE)
+  price             Float
+  images            String[]
+  propertyId        String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime
+  type              String?
+  contracts         Contract[]
+  eventTargets      EventTarget[]
+  maintenanceEvents MaintenanceEvent[]
+  renters           Renter[]
+  property          Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomServices      RoomService[]
 }
 
 model RoomService {
@@ -213,9 +213,9 @@ model RoomService {
   status    ServiceStatus @default(ACTIVE)
   createdAt DateTime      @default(now())
   updatedAt DateTime
-  Payment   Payment[]
-  Room      Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  Service   Service       @relation(fields: [serviceId], references: [id])
+  payments  Payment[]
+  room      Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  service   Service       @relation(fields: [serviceId], references: [id])
 }
 
 model Service {
@@ -228,7 +228,7 @@ model Service {
   active      Boolean       @default(true)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime
-  RoomService RoomService[]
+  roomServices RoomService[]
 }
 
 model Subscription {
@@ -241,8 +241,8 @@ model Subscription {
   autoRenew        Boolean            @default(true)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime
-  SubscriptionPlan SubscriptionPlan   @relation(fields: [planId], references: [id])
-  User             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionPlan SubscriptionPlan   @relation(fields: [planId], references: [id])
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model SubscriptionPlan {
@@ -256,7 +256,7 @@ model SubscriptionPlan {
   active       Boolean        @default(true)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime
-  Subscription Subscription[]
+  subscriptions Subscription[]
 }
 
 model ThemeSettings {
@@ -268,7 +268,7 @@ model ThemeSettings {
   darkMode    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime
-  User        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model User {
@@ -281,14 +281,14 @@ model User {
   updatedAt      DateTime
   isRenter       Boolean         @default(false)
   renterId       String?         @unique
-  Event          Event[]
-  EventTarget    EventTarget[]
-  Property       Property[]
-  Subscription   Subscription?
-  ThemeSettings  ThemeSettings?
-  Renter         Renter?         @relation(fields: [renterId], references: [id])
-  UserPreference UserPreference?
-  UserRole       UserRole[]
+  events         Event[]
+  eventTargets   EventTarget[]
+  properties     Property[]
+  subscription   Subscription?
+  themeSettings  ThemeSettings?
+  renter         Renter?         @relation(fields: [renterId], references: [id])
+  userPreference UserPreference?
+  userRoles      UserRole[]
 }
 
 model UserPreference {
@@ -300,15 +300,15 @@ model UserPreference {
   language   String   @default("en")
   createdAt  DateTime @default(now())
   updatedAt  DateTime
-  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserRole {
   userId     String
   roleId     String
   assignedAt DateTime @default(now())
-  Role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
 }

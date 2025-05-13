@@ -1,5 +1,12 @@
-import { ForbiddenError } from 'apollo-server-express';
 import { GraphQLContext } from '../context';
+
+// Custom error class for authorization errors
+class AuthorizationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthorizationError';
+  }
+}
 
 export interface Permission {
   resource: string;
@@ -21,9 +28,9 @@ export type PermissionRule = (
 export const hasPermission = (resource: string, action: Permission['action']): PermissionRule => {
   return async (context: GraphQLContext, _params: any): Promise<boolean> => {
     const { user, prisma } = context;
-    
+
     if (!user) {
-      throw new ForbiddenError('Authentication required');
+      throw new AuthorizationError('Authentication required');
     }
 
     // Admin users have all permissions
@@ -31,16 +38,22 @@ export const hasPermission = (resource: string, action: Permission['action']): P
       return true;
     }
 
-    // Find the user's role and check if they have the required permission
-    const userPermissions = await prisma.permission.findMany({
+    // Find a role with the required permission
+    const role = await prisma.role.findFirst({
       where: {
-        roleId: user.roleId,
-        resource,
-        [action]: true
+        name: user.role,
+        rolePermissions: {
+          some: {
+            permission: {
+              resource,
+              action
+            }
+          }
+        }
       }
     });
 
-    return userPermissions.length > 0;
+    return !!role;
   };
 };
 
@@ -53,9 +66,9 @@ export const hasPermission = (resource: string, action: Permission['action']): P
 export const isOwner = (resource: string, idField: string): PermissionRule => {
   return async (context: GraphQLContext, params: any): Promise<boolean> => {
     const { user, prisma } = context;
-    
+
     if (!user) {
-      throw new ForbiddenError('Authentication required');
+      throw new AuthorizationError('Authentication required');
     }
 
     // Admin users are considered owners of all resources
@@ -87,21 +100,21 @@ export const isOwner = (resource: string, idField: string): PermissionRule => {
       case 'renter':
         const renter = await prisma.renter.findUnique({
           where: { id: resourceId },
-          select: { userId: true }
+          include: { user: true }
         });
-        return renter?.userId === user.id;
+        return renter?.user?.id === user.id;
 
       case 'document':
         const document = await prisma.document.findUnique({
           where: { id: resourceId },
-          select: { renter: { select: { userId: true } } }
+          include: { renter: { include: { user: true } } }
         });
-        return document?.renter?.userId === user.id;
+        return document?.renter?.user?.id === user.id;
 
       case 'contract':
         const contract = await prisma.contract.findUnique({
           where: { id: resourceId },
-          select: { 
+          select: {
             room: { select: { property: { select: { userId: true } } } }
           }
         });
@@ -121,9 +134,9 @@ export const isOwner = (resource: string, idField: string): PermissionRule => {
 export const canAccessRenter = (renterIdField: string): PermissionRule => {
   return async (context: GraphQLContext, params: any): Promise<boolean> => {
     const { user, prisma } = context;
-    
+
     if (!user) {
-      throw new ForbiddenError('Authentication required');
+      throw new AuthorizationError('Authentication required');
     }
 
     // Admin users can access all renters
@@ -165,9 +178,9 @@ export const canAccessRenter = (renterIdField: string): PermissionRule => {
     if (user.role === 'USER') {
       const renter = await prisma.renter.findUnique({
         where: { id: renterId },
-        select: { userId: true }
+        include: { user: true }
       });
-      return renter?.userId === user.id;
+      return renter?.user?.id === user.id;
     }
 
     return false;
@@ -215,11 +228,11 @@ export const or = (...rules: PermissionRule[]): PermissionRule => {
 export const applyPermission = (rule: PermissionRule, resolver: Function) => {
   return async (parent: any, args: any, context: GraphQLContext, info: any) => {
     const allowed = await rule(context, args);
-    
+
     if (!allowed) {
-      throw new ForbiddenError('Not authorized');
+      throw new AuthorizationError('Not authorized');
     }
-    
+
     return resolver(parent, args, context, info);
   };
-}; 
+};

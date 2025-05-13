@@ -9,7 +9,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: string; // This is derived from userRoles relation
 }
 
 // Context type for GraphQL resolvers
@@ -18,6 +18,7 @@ export interface GraphQLContext {
   userId?: string; // For authenticated users
   isAdmin?: boolean;
   user?: User; // Full user object if authenticated
+  req: any; // Request object
 }
 
 // Create context for each GraphQL request
@@ -25,6 +26,7 @@ export const createContext = async ({ req }: { req: any }): Promise<GraphQLConte
   // Basic context with database access
   const context: GraphQLContext = {
     prisma,
+    req
   };
 
   // Add authentication info to context (if available)
@@ -42,20 +44,37 @@ export const createContext = async ({ req }: { req: any }): Promise<GraphQLConte
         // Set userId in context
         context.userId = decoded.userId;
 
-        // Fetch the user from database
-        const user = await prisma.user.findUnique({
+        // Fetch the user from database with their roles
+        const dbUser = await prisma.user.findUnique({
           where: { id: decoded.userId },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-          },
+          include: {
+            userRoles: {
+              include: {
+                role: true
+              }
+            }
+          }
         });
 
-        if (user) {
-          context.user = user;
-          context.isAdmin = user.role === 'ADMIN';
+        if (dbUser) {
+          // Determine the user's primary role
+          let roleName = 'USER'; // Default role
+          
+          if (dbUser.userRoles && dbUser.userRoles.length > 0) {
+            // Get the first role (could be more sophisticated if users have multiple roles)
+            roleName = dbUser.userRoles[0].role.name;
+          }
+          
+          // Create user object with determined role
+          context.user = {
+            id: dbUser.id,
+            name: dbUser.name,
+            email: dbUser.email,
+            role: roleName
+          };
+          
+          // Set admin flag
+          context.isAdmin = roleName === 'ADMIN';
         }
       } catch (error) {
         // Token verification failed, user will not be added to context

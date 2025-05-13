@@ -1,4 +1,5 @@
 import { GraphQLContext } from '../context';
+import { nanoid } from 'nanoid';
 
 // Interface defining paginated results
 interface PaginatedResult<T> {
@@ -216,7 +217,11 @@ export const renterResolvers = {
 
         // Create the renter
         const renter = await ctx.prisma.renter.create({
-          data: input,
+          data: {
+            id: nanoid(),
+            ...input,
+            updatedAt: new Date()
+          },
         });
 
         // If room was provided and created successfully, update room status

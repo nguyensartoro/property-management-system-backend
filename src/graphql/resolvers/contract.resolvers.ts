@@ -2,6 +2,7 @@ import { GraphQLContext } from '../context';
 import { resolverLogger } from '../../utils/resolverLogger';
 import { calculatePagination, getUserId } from './common';
 import { Contract, ContractStatus, RoomStatus } from '@prisma/client';
+import { nanoid } from 'nanoid';
 
 // Contract resolvers
 export const contractResolvers = {
@@ -207,7 +208,9 @@ export const contractResolvers = {
           // Create the contract
           const createdContract = await prisma.contract.create({
             data: {
+              id: nanoid(),
               ...input,
+              updatedAt: new Date(),
               renters: {
                 connect: input.renterIds.map((id: string) => ({ id })),
               },

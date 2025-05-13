@@ -1,5 +1,6 @@
 import { ThemeSettings } from '../types/ThemeSettings';
 import { GraphQLContext } from '../context';
+import { nanoid } from 'nanoid';
 
 function toThemeSettings(obj: any): ThemeSettings | null {
   if (!obj) return null;
@@ -23,7 +24,13 @@ export const themeSettingsResolvers = {
       { input }: { input: Partial<ThemeSettings> & { userId: string } },
       ctx: GraphQLContext
     ): Promise<ThemeSettings> {
-      const result = await ctx.prisma.themeSettings.create({ data: input });
+      const result = await ctx.prisma.themeSettings.create({ 
+        data: {
+          ...input,
+          id: nanoid(),
+          updatedAt: new Date()
+        } 
+      });
       return toThemeSettings(result)!;
     },
     async updateThemeSettings(

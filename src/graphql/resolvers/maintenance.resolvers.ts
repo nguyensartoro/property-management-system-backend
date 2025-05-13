@@ -2,6 +2,7 @@ import { GraphQLContext } from '../context';
 import { resolverLogger } from '../../utils/resolverLogger';
 import { calculatePagination } from './common';
 import { MaintenanceEvent, Prisma, MaintenanceStatus, MaintenancePriority } from '@prisma/client';
+import { nanoid } from 'nanoid';
 
 // Function to safely get user ID for logging
 function getUserId(ctx: GraphQLContext): string {
@@ -180,7 +181,11 @@ export const maintenanceResolvers = {
 
         // Create the maintenance event
         const maintenanceEvent = await ctx.prisma.maintenanceEvent.create({
-          data: input,
+          data: {
+            id: nanoid(),
+            ...input,
+            updatedAt: new Date()
+          },
           include: { room: true }
         });
 

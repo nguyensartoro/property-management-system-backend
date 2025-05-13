@@ -2,6 +2,7 @@ import { GraphQLContext } from '../context';
 import { resolverLogger } from '../../utils/resolverLogger';
 import { calculatePagination, getUserId } from './common';
 import { Prisma } from '@prisma/client';
+import { nanoid } from 'nanoid';
 
 // Property resolvers
 export const propertyResolvers = {
@@ -147,7 +148,11 @@ export const propertyResolvers = {
 
         // Create the property
         const property = await ctx.prisma.property.create({
-          data: input,
+          data: {
+            id: nanoid(),
+            ...input,
+            updatedAt: new Date()
+          },
           include: {
             rooms: true,
             user: true

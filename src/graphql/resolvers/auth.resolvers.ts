@@ -2,6 +2,7 @@ import { GraphQLContext } from '../context';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { SignOptions } from 'jsonwebtoken';
+import { nanoid } from 'nanoid';
 
 // Authentication resolvers
 export const authResolvers = {
@@ -225,21 +226,25 @@ export const authResolvers = {
         // Create user
         const user = await ctx.prisma.user.create({
           data: {
+            id: nanoid(),
             name: input.name,
             email: input.email,
             password: hashedPassword,
             isRenter: input.isRenter || false,
+            updatedAt: new Date(),
           },
         });
 
         // Auto-create default theme settings for the user
         await ctx.prisma.themeSettings.create({
           data: {
+            id: nanoid(),
             userId: user.id,
             fontSize: 'medium',
             fontFamily: 'inter',
             colorScheme: 'default',
             darkMode: false,
+            updatedAt: new Date(),
           },
         });
 
@@ -284,11 +289,14 @@ export const authResolvers = {
           // Create renter record linked to the user
           const renter = await ctx.prisma.renter.create({
             data: {
-              id: user.id, // Use same ID for linked records
+              id: nanoid(),
               name: user.name,
               email: user.email,
-              phone: "", // Required field but will be updated later
-              userId: user.id,
+              phone: "",
+              user: {
+                connect: { id: user.id }
+              },
+              updatedAt: new Date(),
             },
           });
 

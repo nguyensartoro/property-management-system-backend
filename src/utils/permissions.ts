@@ -2,6 +2,33 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// Define types to avoid implicit any
+interface Permission {
+  resource: string;
+  action: string;
+  name: string;
+}
+
+interface RolePermission {
+  permission: Permission;
+}
+
+interface Role {
+  name: string;
+  rolePermissions: RolePermission[];
+}
+
+interface UserRole {
+  role: Role;
+}
+
+interface User {
+  id: string;
+  userRoles: UserRole[];
+  isRenter?: boolean;
+  renterId?: string;
+}
+
 /**
  * Check if a user has a specific permission for a resource and action
  * @param user - The user object from the request
@@ -9,15 +36,15 @@ const prisma = new PrismaClient();
  * @param action - The action being performed (e.g., 'read', 'create', 'update', 'delete', 'list')
  * @returns Boolean indicating if the user has permission
  */
-export const hasPermission = (user: any, resource: string, action: string): boolean => {
+export const hasPermission = (user: User, resource: string, action: string): boolean => {
   // Admin users have all permissions
-  if (user.userRoles?.some((ur: any) => ur.role.name === 'ADMIN')) {
+  if (user.userRoles?.some((ur) => ur.role.name === 'ADMIN')) {
     return true;
   }
 
   // Check if user has the specific permission through any of their roles
-  const hasSpecificPermission = user.userRoles?.some((userRole: any) => 
-    userRole.role.permissions?.some((rp: any) => 
+  const hasSpecificPermission = user.userRoles?.some((userRole) => 
+    userRole.role.rolePermissions?.some((rp) => 
       rp.permission.resource === resource && 
       rp.permission.action === action
     )
@@ -41,9 +68,9 @@ export const hasPermission = (user: any, resource: string, action: string): bool
  * @param renterId - The ID of the renter being accessed
  * @returns Promise resolving to a boolean indicating if the user has access
  */
-export const hasRenterAccess = async (user: any, renterId: string): Promise<boolean> => {
+export const hasRenterAccess = async (user: User, renterId: string): Promise<boolean> => {
   // Admin users have access to all renters
-  if (user.userRoles?.some((ur: any) => ur.role.name === 'ADMIN')) {
+  if (user.userRoles?.some((ur) => ur.role.name === 'ADMIN')) {
     return true;
   }
 
@@ -53,7 +80,7 @@ export const hasRenterAccess = async (user: any, renterId: string): Promise<bool
   }
 
   // Property managers can access renters in their properties
-  if (user.userRoles?.some((ur: any) => ur.role.name === 'PROPERTY_MANAGER')) {
+  if (user.userRoles?.some((ur) => ur.role.name === 'PROPERTY_MANAGER')) {
     const renter = await prisma.renter.findUnique({
       where: { id: renterId },
       include: {
@@ -83,7 +110,7 @@ export const hasRenterAccess = async (user: any, renterId: string): Promise<bool
  * @param userId - The ID of the user
  * @returns Promise resolving to an array of permission objects
  */
-export const getUserPermissions = async (userId: string) => {
+export const getUserPermissions = async (userId: string): Promise<Permission[]> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
@@ -91,7 +118,7 @@ export const getUserPermissions = async (userId: string) => {
         include: {
           role: {
             include: {
-              permissions: {
+              rolePermissions: {
                 include: {
                   permission: true,
                 },
@@ -109,7 +136,7 @@ export const getUserPermissions = async (userId: string) => {
 
   // Extract unique permissions from all roles
   const permissions = user.userRoles.flatMap((userRole) => 
-    userRole.role.permissions.map((rolePermission) => ({
+    userRole.role.rolePermissions.map((rolePermission) => ({
       resource: rolePermission.permission.resource,
       action: rolePermission.permission.action,
       name: rolePermission.permission.name,
@@ -117,5 +144,5 @@ export const getUserPermissions = async (userId: string) => {
   );
 
   // Remove duplicates
-  return [...new Map(permissions.map(p => [p.name, p])).values()];
+  return [...new Map(permissions.map((p: Permission) => [p.name, p])).values()];
 }; 

@@ -2,6 +2,7 @@ import { GraphQLContext } from '../context';
 import { resolverLogger } from '../../utils/resolverLogger';
 import { calculatePagination, getUserId } from './common';
 import { Prisma, Service, FeeType } from '@prisma/client';
+import { nanoid } from 'nanoid';
 
 // Interface defining paginated results
 interface PaginatedResult<T> {
@@ -146,7 +147,11 @@ export const serviceResolvers = {
 
         // Create the service
         const service = await ctx.prisma.service.create({
-          data: input
+          data: {
+            id: nanoid(),
+            ...input,
+            updatedAt: new Date()
+          }
         });
 
         resolverLogger.log(resolverName, { created: service.id });

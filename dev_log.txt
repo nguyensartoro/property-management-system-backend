@@ -1,0 +1,61 @@
+
+> backend@1.0.0 dev
+> nodemon --exec ts-node src/server.ts
+
+[33m[nodemon] 3.1.10[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): *.*[39m
+[33m[nodemon] watching extensions: ts,json[39m
+[32m[nodemon] starting `ts-node src/server.ts`[39m
+/Users/nguyen/Documents/Personal/project/backend/node_modules/ts-node/src/index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/graphql/resolvers/document.resolvers.ts(31,16): error TS2561: Object literal may only specify known properties, but 'room' does not exist in type 'RenterInclude<DefaultArgs>'. Did you mean to write 'Room'?
+src/graphql/resolvers/document.resolvers.ts(40,19): error TS2339: Property 'room' does not exist on type '{ name: string; id: string; createdAt: Date; roomId: string | null; updatedAt: Date; email: string | null; phone: string; emergencyContact: string | null; identityNumber: string | null; avatar: string | null; }'.
+src/graphql/resolvers/document.resolvers.ts(73,7): error TS2561: Object literal may only specify known properties, but 'rooms' does not exist in type 'PropertyInclude<DefaultArgs>'. Did you mean to write 'Room'?
+src/graphql/resolvers/document.resolvers.ts(85,33): error TS2339: Property 'rooms' does not exist on type '{ name: string; id: string; createdAt: Date; updatedAt: Date; userId: string; address: string; }'.
+src/graphql/resolvers/document.resolvers.ts(113,22): error TS2561: Object literal may only specify known properties, but 'renter' does not exist in type 'DocumentInclude<DefaultArgs>'. Did you mean to write 'Renter'?
+src/graphql/resolvers/document.resolvers.ts(176,26): error TS2561: Object literal may only specify known properties, but 'room' does not exist in type 'RenterInclude<DefaultArgs>'. Did you mean to write 'Room'?
+src/graphql/resolvers/document.resolvers.ts(186,24): error TS2339: Property 'room' does not exist on type '{ name: string; id: string; createdAt: Date; roomId: string | null; updatedAt: Date; email: string | null; phone: string; emergencyContact: string | null; identityNumber: string | null; avatar: string | null; }'.
+src/graphql/resolvers/document.resolvers.ts(274,22): error TS2561: Object literal may only specify known properties, but 'room' does not exist in type 'RenterInclude<DefaultArgs>'. Did you mean to write 'Room'?
+src/graphql/resolvers/document.resolvers.ts(288,22): error TS2339: Property 'room' does not exist on type '{ name: string; id: string; createdAt: Date; roomId: string | null; updatedAt: Date; email: string | null; phone: string; emergencyContact: string | null; identityNumber: string | null; avatar: string | null; }'.
+src/graphql/resolvers/document.resolvers.ts(330,22): error TS2561: Object literal may only specify known properties, but 'renter' does not exist in type 'DocumentInclude<DefaultArgs>'. Did you mean to write 'Renter'?
+src/graphql/resolvers/document.resolvers.ts(375,22): error TS2561: Object literal may only specify known properties, but 'renter' does not exist in type 'DocumentInclude<DefaultArgs>'. Did you mean to write 'Renter'?
+
+    at createTSError (/Users/nguyen/Documents/Personal/project/backend/node_modules/ts-node/src/index.ts:859:12)
+    at reportTSError (/Users/nguyen/Documents/Personal/project/backend/node_modules/ts-node/src/index.ts:863:19)
+    at getOutput (/Users/nguyen/Documents/Personal/project/backend/node_modules/ts-node/src/index.ts:1077:36)
+    at Object.compile (/Users/nguyen/Documents/Personal/project/backend/node_modules/ts-node/src/index.ts:1433:41)
+    at Module.m._compile (/Users/nguyen/Documents/Personal/project/backend/node_modules/ts-node/src/index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+    at Object.require.extensions.<computed> [as .ts] (/Users/nguyen/Documents/Personal/project/backend/node_modules/ts-node/src/index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1288:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1104:12)
+    at Module.require (node:internal/modules/cjs/loader:1311:19) {
+  diagnosticCodes: [
+    2561, 2339, 2561,
+    2339, 2561, 2561,
+    2339, 2561, 2339,
+    2561, 2561
+  ]
+}
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting child process[39m
+[32m[nodemon] starting `ts-node src/server.ts`[39m
+node:events:496
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: read EIO
+    at TTY.onStreamRead (node:internal/stream_base_commons:218:20)
+Emitted 'error' event on ReadStream instance at:
+    at emitErrorNT (node:internal/streams/destroy:169:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:128:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  errno: -5,
+  code: 'EIO',
+  syscall: 'read'
+}
+
+Node.js v20.18.1

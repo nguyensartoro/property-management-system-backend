@@ -1,6 +1,7 @@
 import { GraphQLContext } from '../context';
 import { resolverLogger } from '../../utils/resolverLogger';
 import { PaginatedResult, getUserId, calculatePagination } from './common';
+import { nanoid } from 'nanoid';
 
 /**
  * Check if the user has access to a specific document
@@ -297,7 +298,11 @@ export const documentResolvers = {
         // Create the document
         resolverLogger.db('create', 'Document', { renterId: input.renterId });
         const document = await ctx.prisma.document.create({
-          data: input,
+          data: {
+            id: nanoid(),
+            ...input,
+            updatedAt: new Date()
+          },
         });
 
         resolverLogger.log(resolverName, { created: document.id });

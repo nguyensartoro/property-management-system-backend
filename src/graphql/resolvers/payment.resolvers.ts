@@ -2,6 +2,7 @@ import { GraphQLContext } from '../context';
 import { resolverLogger } from '../../utils/resolverLogger';
 import { calculatePagination, getUserId } from './common';
 import { Payment, Prisma, PaymentStatus } from '@prisma/client';
+import { nanoid } from 'nanoid';
 
 // Interface defining paginated results
 interface PaginatedResult<T> {
@@ -189,7 +190,11 @@ export const paymentResolvers = {
 
         // Create the payment
         const payment = await ctx.prisma.payment.create({
-          data: input,
+          data: {
+            id: nanoid(),
+            ...input,
+            updatedAt: new Date()
+          },
           include: {
             renter: true,
             contract: true

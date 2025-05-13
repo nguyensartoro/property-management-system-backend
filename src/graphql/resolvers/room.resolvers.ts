@@ -1,4 +1,5 @@
 import { GraphQLContext } from '../context';
+import { nanoid } from 'nanoid';
 
 // Interface defining paginated results
 interface PaginatedResult<T> {
@@ -117,7 +118,11 @@ export const roomResolvers = {
     // Create a new room
     createRoom: async (_: any, { input }: { input: any }, ctx: GraphQLContext) => {
       return ctx.prisma.room.create({
-        data: input,
+        data: {
+          id: nanoid(),
+          ...input,
+          updatedAt: new Date()
+        },
       });
     },
 
